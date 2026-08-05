@@ -1,0 +1,189 @@
+/* 機能仕様書 1.4「画面構成」: ヘッダー・メイン領域・フッターの3区画。ヘッダー・フッターは1行。 */
+:root {
+  --border-color: #d0d3d8;
+  --text-color: #1f2328;
+  --muted-color: #6b7280;
+  --danger-color: #c0392b;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: system-ui, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  color: var(--text-color);
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-header,
+.app-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-color);
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.app-footer {
+  border-bottom: none;
+  border-top: 1px solid var(--border-color);
+  justify-content: space-between;
+}
+
+.app-title {
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.footer-left,
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-right {
+  color: var(--muted-color);
+  font-size: 0.85em;
+}
+
+button {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #f2f3f5;
+}
+
+.error-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger-color);
+  color: #fff;
+  font-size: 0.75em;
+}
+
+.error-badge[hidden] {
+  display: none;
+}
+
+.app-main {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: #fafbfc;
+}
+
+.diagram-viewport {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.diagram-viewport.dragging {
+  cursor: grabbing;
+}
+
+.zoom-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 2;
+}
+
+.zoom-controls button {
+  width: 32px;
+  height: 32px;
+}
+
+.panel {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  max-width: min(480px, calc(100vw - 24px));
+  max-height: 50vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 8px 12px;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.error-entry,
+.warning-entry {
+  padding: 4px 0;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.9em;
+}
+
+.error-entry:first-child,
+.warning-entry:first-child {
+  border-top: none;
+}
+
+.error-entry-heading,
+.warning-entry-heading {
+  font-weight: 600;
+}
+
+.error-entry-detail {
+  color: var(--danger-color);
+}
+
+.warning-entry-detail {
+  color: var(--muted-color);
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 0.9em;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      機能仕様書 6.3: CSPのmetaタグは許可対象のインラインスクリプトより必ず前に出力する。
+      script-src のハッシュ値は scripts/inject-csp-hash.js がビルド後に算出・置換する（初期値はダミー）。
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'sha256-PLACEHOLDER'; style-src 'unsafe-inline'; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none'; media-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Planner CCMP Support</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
