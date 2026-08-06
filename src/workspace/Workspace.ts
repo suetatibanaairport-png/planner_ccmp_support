@@ -36,6 +36,11 @@ export class Workspace {
     return [...this.projects.values()];
   }
 
+  /** ステージ[0]（E402判定用、呼び出し元 ui/App.ts）: 読み込み済みファイル数。 */
+  getLoadedFileCount(): number {
+    return this.rawTextByFileName.size;
+  }
+
   /**
    * 4.1.1/3.7: 休日設定ファイルの置き換え時に呼び出す。所要日数は休日設定に依存するため、
    * 読み込み済みの全ファイルを保持済みの生テキストから再処理する（新規の上限・重複判定は行わない）。
@@ -98,7 +103,11 @@ export class Workspace {
     return fileName.replace(/\.[^.]+$/, "");
   }
 
-  /** ステージ[1]〜[12]: ファイル名昇順で1件ずつ処理し、上限・重複違反ファイルのみ個別に拒否する（5.2.5）。 */
+  /**
+   * ステージ[1]〜[12]: ファイル名昇順で1件ずつ処理し、重複・上限違反ファイルのみ個別に拒否する（5.2.5）。
+   * ファイル数上限（E402）・サイズ上限（E404）はステージ[0]として呼び出し元（ui/App.ts）で判定済みのため、
+   * ここでは受け取った時点で既にステージ[0]を通過したファイルのみを扱う。
+   */
   addFiles(files: readonly { name: string; text: string }[]): AddFilesResult {
     const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name, "en"));
 
@@ -106,7 +115,6 @@ export class Workspace {
     const addedProjectKeys: string[] = [];
     const warnings: WarningInfo[] = [];
 
-    let cumulativeFileCount = this.rawTextByFileName.size;
     let cumulativeTaskCount = this.countAllTasks();
 
     for (const file of sorted) {
@@ -115,14 +123,6 @@ export class Workspace {
           code: "E205",
           fileName: file.name,
           message: `ファイル名 "${file.name}" は既に読み込まれています。`,
-        });
-        continue;
-      }
-      if (cumulativeFileCount + 1 > LIMITS.maxFiles) {
-        rejectedFiles.push({
-          code: "E402",
-          fileName: file.name,
-          message: `読み込み可能なファイル数の上限（${LIMITS.maxFiles}件）を超えています。`,
         });
         continue;
       }
@@ -161,7 +161,6 @@ export class Workspace {
         project.tasks.map((t) => t.id),
       );
       for (const t of project.tasks) this.taskIdOwner.set(t.id, file.name);
-      cumulativeFileCount += 1;
       cumulativeTaskCount += taskCountInFile;
       warnings.push(...project.warnings);
 

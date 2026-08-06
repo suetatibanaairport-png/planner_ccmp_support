@@ -169,22 +169,35 @@ export class App {
     }
   }
 
+  /**
+   * ステージ[0]: 選択ファイル数・各ファイルのサイズのみで事前検証する（機能仕様書 4.1 ステージ[0]）。
+   * FileReader による内容読み込みより前に、E402（ファイル数上限）・E404（サイズ上限）を判定する。
+   */
   private async handleFilesSelected(fileList: FileList): Promise<void> {
     const files = [...fileList].sort((a, b) => a.name.localeCompare(b.name, "en"));
+    const existingFileCount = this.workspace.getLoadedFileCount();
 
     const preRejected: FatalErrorInfo[] = [];
     const readable: File[] = [];
-    for (const file of files) {
+    files.forEach((file, index) => {
+      if (existingFileCount + index + 1 > LIMITS.maxFiles) {
+        preRejected.push({
+          code: "E402",
+          fileName: file.name,
+          message: `読み込み可能なファイル数の上限（${LIMITS.maxFiles}件）を超えています。`,
+        });
+        return;
+      }
       if (file.size > LIMITS.maxFileSizeBytes) {
         preRejected.push({
           code: "E404",
           fileName: file.name,
           message: `ファイルサイズが上限（${Math.floor(LIMITS.maxFileSizeBytes / (1024 * 1024))}MB）を超えています。`,
         });
-        continue;
+        return;
       }
       readable.push(file);
-    }
+    });
 
     const texts = await Promise.all(readable.map((file) => readFileAsText(file)));
     const entries = readable.map((file, i) => ({ name: file.name, text: texts[i]! }));
