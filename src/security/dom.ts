@@ -51,7 +51,7 @@ export function createSvgElement<K extends keyof SVGElementTagNameMap>(
   attrs?: Record<string, string | number>,
   textContent?: string,
 ): SVGElementTagNameMap[K] {
-  const el = document.createElementNS(SVG_NS, tag) as SVGElementTagNameMap[K];
+  const el = document.createElementNS(SVG_NS, tag);
   applyAttrsAndText(el, attrs, textContent);
   return el;
 }

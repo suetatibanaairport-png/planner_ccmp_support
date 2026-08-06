@@ -252,5 +252,5 @@ function numberEvents(
 
   const events: Event[] = order.map((id) => ({ id, number: numberOf.get(id)! }));
 
-  return { events, arrows: arrows as Arrow[] };
+  return { events, arrows };
 }
