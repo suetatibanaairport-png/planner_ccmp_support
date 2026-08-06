@@ -1,6 +1,11 @@
 // 機能仕様書 5.1「方針」のエラー表示パネルの実装。
 // パネル形式: 1件につき「<ファイル名> - <ステージ名>」の行 + エラーコード・メッセージの行。
-import { appendChildren, clearChildren, createHtmlElement, setSafeAttribute } from "../security/dom";
+import {
+  appendChildren,
+  clearChildren,
+  createHtmlElement,
+  setSafeAttribute,
+} from "../security/dom";
 import type { FatalErrorInfo, WarningInfo } from "../types";
 
 /** 5.1: E1xx=ファイル・パース、E2xx=データ整合性、E4xx=処理。 */

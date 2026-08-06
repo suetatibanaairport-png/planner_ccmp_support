@@ -5,7 +5,10 @@ import { UNASSIGNED_COLOR } from "../workspace/colorPalette";
 const UNASSIGNED_LABEL = "未アサイン";
 
 /** 凡例パネルの内容を再構築する（担当者名と色の一覧。色相環の再生成のたびに呼び直す）。 */
-export function renderLegend(container: HTMLElement, colorPalette: ReadonlyMap<string, string>): void {
+export function renderLegend(
+  container: HTMLElement,
+  colorPalette: ReadonlyMap<string, string>,
+): void {
   clearChildren(container);
 
   const entries: Array<[string, string]> = [...colorPalette.entries()];

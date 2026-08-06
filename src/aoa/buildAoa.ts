@@ -165,7 +165,11 @@ function reduceDummyArrows(arrows: RawArrow[]): { events: EventId[]; arrows: Raw
     // 規則1: 合流イベントmの入辺がダミー1本のみ → mを上流イベントに統合
     for (const [eventId, ins] of incoming) {
       if (eventId === "N0" || eventId === "Nz") continue;
-      if (ins.length === 1 && ins[0]!.kind === "dummy" && (outgoing.get(eventId)?.length ?? 0) > 0) {
+      if (
+        ins.length === 1 &&
+        ins[0]!.kind === "dummy" &&
+        (outgoing.get(eventId)?.length ?? 0) > 0
+      ) {
         const dummy = ins[0]!;
         current = current
           .filter((a) => a !== dummy)

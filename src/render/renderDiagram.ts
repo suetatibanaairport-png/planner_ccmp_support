@@ -96,7 +96,9 @@ export function renderDiagram(
       const x2 = toPixelX(toPos.x);
       const y2 = toPixelY(pl, toPos.row);
 
-      const points = timing.arrow.placeholder ? zigzagPoints(x1, y1, x2, y2) : elbowPoints(x1, y1, x2, y2);
+      const points = timing.arrow.placeholder
+        ? zigzagPoints(x1, y1, x2, y2)
+        : elbowPoints(x1, y1, x2, y2);
       const isDummy = timing.arrow.kind === "dummy";
       const strokeColor = isDummy ? DUMMY_COLOR : colorFor(colorPalette, timing.arrow.assignee);
 
@@ -138,7 +140,11 @@ const DIAGONAL_RUN = 24; // 分岐部の斜め線がX方向に進む長さ（px�
 
 /** 折れ線（ノード→斜め線→水平線→ノード）で2点を結ぶ（4.2.4「矢線の描画」）。 */
 function elbowPoints(x1: number, y1: number, x2: number, y2: number): Array<[number, number]> {
-  if (y1 === y2) return [[x1, y1], [x2, y2]];
+  if (y1 === y2)
+    return [
+      [x1, y1],
+      [x2, y2],
+    ];
   const run = Math.min(DIAGONAL_RUN, Math.abs(x2 - x1) / 2);
   const kinkX = x1 + run;
   return [

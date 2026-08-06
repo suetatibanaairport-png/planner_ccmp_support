@@ -24,8 +24,7 @@ export interface ProcessedProject {
 }
 
 export type ProcessFileResult =
-  | { ok: true; project: ProcessedProject }
-  | { ok: false; error: FatalErrorInfo };
+  { ok: true; project: ProcessedProject } | { ok: false; error: FatalErrorInfo };
 
 /** ステージ[2]〜[12]: CSVパース以降、AOA変換・時刻計算・CCPMまでを実行する純粋処理。 */
 export function processFile(

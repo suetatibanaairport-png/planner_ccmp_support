@@ -28,7 +28,9 @@ interface Interval {
  * 実作業エッジ（ダミー矢線・未アサインを除く）を検出する（3.5.3）。
  * 比較はプロジェクトをまたぐ組み合わせのみを対象とする。
  */
-export function detectResourceConflicts(projects: readonly ProjectArrowTimings[]): ResourceConflict[] {
+export function detectResourceConflicts(
+  projects: readonly ProjectArrowTimings[],
+): ResourceConflict[] {
   const intervalsByAssignee = new Map<string, Interval[]>();
 
   for (const project of projects) {

@@ -14,7 +14,9 @@ const html = readFileSync(distIndexPath, "utf-8");
 
 const scriptMatch = html.match(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/);
 if (!scriptMatch) {
-  throw new Error("inject-csp-hash: ビルド後の index.html にインラインスクリプトが見つかりません。");
+  throw new Error(
+    "inject-csp-hash: ビルド後の index.html にインラインスクリプトが見つかりません。",
+  );
 }
 const scriptContent = scriptMatch[1];
 
@@ -22,7 +24,9 @@ const hash = createHash("sha256").update(scriptContent, "utf-8").digest("base64"
 const scriptSrcValue = `'sha256-${hash}'`;
 
 if (!html.includes("script-src 'sha256-PLACEHOLDER'")) {
-  throw new Error("inject-csp-hash: CSP meta タグのプレースホルダー（script-src 'sha256-PLACEHOLDER'）が見つかりません。");
+  throw new Error(
+    "inject-csp-hash: CSP meta タグのプレースホルダー（script-src 'sha256-PLACEHOLDER'）が見つかりません。",
+  );
 }
 const updatedHtml = html.replace("script-src 'sha256-PLACEHOLDER'", `script-src ${scriptSrcValue}`);
 

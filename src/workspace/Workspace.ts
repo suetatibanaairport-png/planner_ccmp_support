@@ -217,7 +217,8 @@ export class Workspace {
         warnings.push({
           code: "W315",
           fileName: p.fileName,
-          message: "有効な開始日を持つタスクが1件もないため、共通時間軸上の基準日を決定できません。",
+          message:
+            "有効な開始日を持つタスクが1件もないため、共通時間軸上の基準日を決定できません。",
         });
       }
     }

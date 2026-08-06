@@ -3,13 +3,14 @@
 import { parseHolidayFile } from "../calendar/holidayFile";
 import { layoutWorkspace } from "../layout/layoutWorkspace";
 import { DEFAULT_DIAGRAM_CONFIG, renderDiagram } from "../render/renderDiagram";
-import {
-  renderErrorPanel,
-  renderWarningList,
-  updateErrorBadge,
-} from "../render/renderErrorPanel";
+import { renderErrorPanel, renderWarningList, updateErrorBadge } from "../render/renderErrorPanel";
 import { renderLegend } from "../render/renderLegend";
-import { appendChildren, clearChildren, createHtmlElement, setSafeAttribute } from "../security/dom";
+import {
+  appendChildren,
+  clearChildren,
+  createHtmlElement,
+  setSafeAttribute,
+} from "../security/dom";
 import type { FatalErrorInfo, WarningInfo } from "../types";
 import { LIMITS } from "../validate/limits";
 import { Workspace } from "../workspace/Workspace";
@@ -100,7 +101,10 @@ export class App {
     appendChildren(zoomControls, [zoomIn, zoomOut]);
 
     this.errorPanel = createHtmlElement("div", { class: "panel error-panel", hidden: "hidden" });
-    this.warningPanel = createHtmlElement("div", { class: "panel warning-panel", hidden: "hidden" });
+    this.warningPanel = createHtmlElement("div", {
+      class: "panel warning-panel",
+      hidden: "hidden",
+    });
     this.legendPanel = createHtmlElement("div", { class: "panel legend-panel", hidden: "hidden" });
 
     appendChildren(main, [
@@ -295,7 +299,10 @@ export class App {
   private applyZoom(factor: number, origin: { x: number; y: number } | null): void {
     const nextScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, this.scale * factor));
     const appliedFactor = nextScale / this.scale;
-    const pivot = origin ?? { x: this.diagramViewport.clientWidth / 2, y: this.diagramViewport.clientHeight / 2 };
+    const pivot = origin ?? {
+      x: this.diagramViewport.clientWidth / 2,
+      y: this.diagramViewport.clientHeight / 2,
+    };
 
     this.translateX = pivot.x - (pivot.x - this.translateX) * appliedFactor;
     this.translateY = pivot.y - (pivot.y - this.translateY) * appliedFactor;

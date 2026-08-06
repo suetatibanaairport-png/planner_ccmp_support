@@ -17,7 +17,10 @@ export function generateColorPalette(assigneeNames: readonly string[]): Map<stri
   return palette;
 }
 
-export function colorFor(palette: ReadonlyMap<string, string>, assignee: string | undefined): string {
+export function colorFor(
+  palette: ReadonlyMap<string, string>,
+  assignee: string | undefined,
+): string {
   if (assignee === undefined) return UNASSIGNED_COLOR;
   return palette.get(assignee) ?? UNASSIGNED_COLOR;
 }

@@ -68,7 +68,10 @@ export function layoutWorkspace(projects: readonly Project[]): WorkspaceLayout {
  * ESが等しいイベント同士（同じX位置）を「層」とみなし、隣接層の平均位置に基づいて
  * 前進・後進を交互に繰り返し並べ替える。層内での位置がそのままスロット番号になる。
  */
-function layoutProjectRows(events: readonly Event[], arrows: Project["arrows"]): Map<EventId, number> {
+function layoutProjectRows(
+  events: readonly Event[],
+  arrows: Project["arrows"],
+): Map<EventId, number> {
   if (events.length === 0) return new Map();
 
   const numberOf = new Map<EventId, number>();

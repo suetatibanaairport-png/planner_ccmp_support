@@ -1,0 +1,7 @@
+dist/
+node_modules/
+package-lock.json
+
+# 仕様書・README は表組み・日本語整形が崩れるリスクがあるため対象外
+docs/
+README.md
