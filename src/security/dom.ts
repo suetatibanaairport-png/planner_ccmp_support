@@ -17,13 +17,12 @@ function assertSafeAttributeName(name: string): void {
   }
 }
 
-/** HTML要素を生成する。CSV由来の文字列は第3引数の textContent としてのみ渡すこと。 */
-export function createHtmlElement<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
+/** 生成済み要素に属性・テキストを安全に適用する（createHtmlElement/createSvgElement共通処理）。 */
+function applyAttrsAndText(
+  el: Element,
   attrs?: Record<string, string | number>,
   textContent?: string,
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
+): void {
   if (attrs) {
     for (const [name, value] of Object.entries(attrs)) {
       assertSafeAttributeName(name);
@@ -33,6 +32,16 @@ export function createHtmlElement<K extends keyof HTMLElementTagNameMap>(
   if (textContent !== undefined) {
     el.textContent = textContent;
   }
+}
+
+/** HTML要素を生成する。CSV由来の文字列は第3引数の textContent としてのみ渡すこと。 */
+export function createHtmlElement<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  attrs?: Record<string, string | number>,
+  textContent?: string,
+): HTMLElementTagNameMap[K] {
+  const el = document.createElement(tag);
+  applyAttrsAndText(el, attrs, textContent);
   return el;
 }
 
@@ -43,15 +52,7 @@ export function createSvgElement<K extends keyof SVGElementTagNameMap>(
   textContent?: string,
 ): SVGElementTagNameMap[K] {
   const el = document.createElementNS(SVG_NS, tag) as SVGElementTagNameMap[K];
-  if (attrs) {
-    for (const [name, value] of Object.entries(attrs)) {
-      assertSafeAttributeName(name);
-      el.setAttribute(name, String(value));
-    }
-  }
-  if (textContent !== undefined) {
-    el.textContent = textContent;
-  }
+  applyAttrsAndText(el, attrs, textContent);
   return el;
 }
 

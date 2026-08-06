@@ -201,13 +201,9 @@ export class App {
 
   private async handleHolidayFileSelected(file: File): Promise<void> {
     const text = await readFileAsText(file);
-    const rows = text.split(/\r\n|\r|\n/).filter((line) => line.trim() !== "");
     const parsed = parseHolidayFile(text);
 
-    const totalRows = rows.length;
-    const isUnreadable = totalRows === 0 || parsed.invalidRowCount >= totalRows;
-
-    if (isUnreadable) {
+    if (parsed.unreadable) {
       this.allWarnings.push({
         code: "W314",
         fileName: file.name,

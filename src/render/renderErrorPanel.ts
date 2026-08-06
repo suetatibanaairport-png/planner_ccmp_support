@@ -11,22 +11,28 @@ function stageNameFor(code: string): string {
   return "エラー";
 }
 
-export function renderErrorPanel(container: HTMLElement, errors: readonly FatalErrorInfo[]): void {
+/** 見出し行・詳細行の2行構成のエントリー一覧を描画する共通処理。 */
+function renderEntryList<T>(
+  container: HTMLElement,
+  items: readonly T[],
+  entryClassPrefix: string,
+  headingFor: (item: T) => string,
+  detailFor: (item: T) => string,
+): void {
   clearChildren(container);
 
-  const entries = errors.map((error) => {
-    const fileName = error.fileName ?? "(ファイル不明)";
+  const entries = items.map((item) => {
     const headingLine = createHtmlElement(
       "div",
-      { class: "error-entry-heading" },
-      `${fileName} - ${stageNameFor(error.code)}`,
+      { class: `${entryClassPrefix}-entry-heading` },
+      headingFor(item),
     );
     const detailLine = createHtmlElement(
       "div",
-      { class: "error-entry-detail" },
-      `${error.code}: ${error.message}`,
+      { class: `${entryClassPrefix}-entry-detail` },
+      detailFor(item),
     );
-    const entry = createHtmlElement("div", { class: "error-entry" });
+    const entry = createHtmlElement("div", { class: `${entryClassPrefix}-entry` });
     appendChildren(entry, [headingLine, detailLine]);
     return entry;
   });
@@ -34,28 +40,28 @@ export function renderErrorPanel(container: HTMLElement, errors: readonly FatalE
   appendChildren(container, entries);
 }
 
+export function renderErrorPanel(container: HTMLElement, errors: readonly FatalErrorInfo[]): void {
+  renderEntryList(
+    container,
+    errors,
+    "error",
+    (error) => `${error.fileName ?? "(ファイル不明)"} - ${stageNameFor(error.code)}`,
+    (error) => `${error.code}: ${error.message}`,
+  );
+}
+
 /** 5.1: 警告は処理を継続したうえで一覧表示する。致命的エラーと同じパネル内に併記する。 */
 export function renderWarningList(container: HTMLElement, warnings: readonly WarningInfo[]): void {
-  clearChildren(container);
-
-  const entries = warnings.map((warning) => {
-    const taskPart = warning.taskId !== undefined ? `（タスク ID: ${warning.taskId}）` : "";
-    const headingLine = createHtmlElement(
-      "div",
-      { class: "warning-entry-heading" },
-      warning.fileName,
-    );
-    const detailLine = createHtmlElement(
-      "div",
-      { class: "warning-entry-detail" },
-      `${warning.code}: ${warning.message}${taskPart}`,
-    );
-    const entry = createHtmlElement("div", { class: "warning-entry" });
-    appendChildren(entry, [headingLine, detailLine]);
-    return entry;
-  });
-
-  appendChildren(container, entries);
+  renderEntryList(
+    container,
+    warnings,
+    "warning",
+    (warning) => warning.fileName,
+    (warning) => {
+      const taskPart = warning.taskId !== undefined ? `（タスク ID: ${warning.taskId}）` : "";
+      return `${warning.code}: ${warning.message}${taskPart}`;
+    },
+  );
 }
 
 /** フッターのエラーボタン右側に表示する丸バッジの件数を更新する（0件ならバッジ非表示）。 */

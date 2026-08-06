@@ -53,7 +53,6 @@ export function buildAoa(
 
   const mergeEventIds = new Map<string, EventId>(); // key: ソート済み先行ID結合文字列
   const rawArrows: RawArrow[] = [];
-  const usedEventIds = new Set<EventId>([START_EVENT_ID, END_EVENT_ID]);
 
   // 手順3: 開始イベントの決定
   function startEventOf(taskId: TaskId): EventId {
@@ -67,7 +66,6 @@ export function buildAoa(
     if (mergeId === undefined) {
       mergeId = mergeEventOf(sorted);
       mergeEventIds.set(key, mergeId);
-      usedEventIds.add(mergeId);
       for (const p of sorted) {
         rawArrows.push({
           from: endEventOf(p),
@@ -87,7 +85,6 @@ export function buildAoa(
     if (!task) continue;
 
     const end = endEventOf(task.id);
-    usedEventIds.add(end);
     const start = startEventOf(task.id);
     const duration = durationsByTaskId.get(task.id) ?? {
       taskId: task.id,
@@ -111,7 +108,6 @@ export function buildAoa(
       // 手順6a: 担当者ごとに実作業エッジを作成し、0営業日のダミーで再合流させる
       assignees.forEach((assignee, index) => {
         const mid: EventId = `assignee:${task.id}:${index}`;
-        usedEventIds.add(mid);
         rawArrows.push({
           from: start,
           to: mid,
@@ -144,7 +140,7 @@ export function buildAoa(
   }
 
   // 手順5: ダミー矢線の削減（局所的な2規則。最小性は保証しない）
-  const reduced = reduceDummyArrows(rawArrows, usedEventIds);
+  const reduced = reduceDummyArrows(rawArrows);
 
   // 手順7: イベント番号付け（トポロジカル順、0起点、全矢線で i<j を保証）
   const numbered = numberEvents(reduced.events, reduced.arrows);
@@ -152,10 +148,7 @@ export function buildAoa(
   return numbered;
 }
 
-function reduceDummyArrows(
-  arrows: RawArrow[],
-  eventIds: Set<EventId>,
-): { events: EventId[]; arrows: RawArrow[] } {
+function reduceDummyArrows(arrows: RawArrow[]): { events: EventId[]; arrows: RawArrow[] } {
   // イベントごとの入次数・出次数（種別別）を数える
   let current = arrows;
   let changed = true;
@@ -205,12 +198,20 @@ function reduceDummyArrows(
     remainingEventIds.add(a.from);
     remainingEventIds.add(a.to);
   }
-  // 矢線を持たない孤立イベント（理論上発生しないが念のため）は除く
-  for (const id of eventIds) {
-    if (remainingEventIds.has(id)) remainingEventIds.add(id);
-  }
 
   return { events: [...remainingEventIds], arrows: current };
+}
+
+/** ソート済み配列を維持したまま二分探索で挿入する。 */
+function insertSorted(sorted: EventId[], value: EventId): void {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (sorted[mid]! < value) lo = mid + 1;
+    else hi = mid;
+  }
+  sorted.splice(lo, 0, value);
 }
 
 function numberEvents(
@@ -241,8 +242,7 @@ function numberEvents(
       const d = (remainingInDegree.get(next) ?? 0) - 1;
       remainingInDegree.set(next, d);
       if (d === 0) {
-        queue.push(next);
-        queue.sort();
+        insertSorted(queue, next);
       }
     }
   }
@@ -251,15 +251,6 @@ function numberEvents(
   order.forEach((id, index) => numberOf.set(id, index));
 
   const events: Event[] = order.map((id) => ({ id, number: numberOf.get(id)! }));
-  const numberedArrows: Arrow[] = arrows.map((a) => ({
-    from: a.from,
-    to: a.to,
-    kind: a.kind,
-    taskId: a.taskId,
-    assignee: a.assignee,
-    durationBusinessDays: a.durationBusinessDays,
-    placeholder: a.placeholder,
-  }));
 
-  return { events, arrows: numberedArrows };
+  return { events, arrows: arrows as Arrow[] };
 }

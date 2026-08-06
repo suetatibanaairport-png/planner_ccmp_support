@@ -1,6 +1,7 @@
 // 機能仕様書 3.2「列定義」に基づく Task モデルへの正規化。
 import type { CsvRecord } from "../csv/parseCsv";
 import type { Task } from "../types";
+import { splitAndTrim } from "./splitAndTrim";
 
 const COLUMNS = {
   taskId: "タスク ID",
@@ -20,13 +21,6 @@ export function hasRequiredColumns(header: string[]): boolean {
   return REQUIRED_COLUMNS.every((col) => header.includes(col));
 }
 
-function splitSemicolon(value: string): string[] {
-  return value
-    .split(";")
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0);
-}
-
 function normalizeDateField(value: string | undefined): string | null {
   const trimmed = (value ?? "").trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -41,7 +35,7 @@ export function normalizeTask(record: CsvRecord): Task | null {
     id,
     name: (record[COLUMNS.taskName] ?? "").trim(),
     bucketName: (record[COLUMNS.bucketName] ?? "").trim(),
-    assignees: splitSemicolon(record[COLUMNS.assignees] ?? ""),
+    assignees: splitAndTrim(record[COLUMNS.assignees] ?? "", ";"),
     startDate: normalizeDateField(record[COLUMNS.startDate]),
     dueDate: normalizeDateField(record[COLUMNS.dueDate]),
     isRecurring: (record[COLUMNS.recurring] ?? "").trim() === "はい",

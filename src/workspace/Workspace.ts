@@ -1,9 +1,9 @@
 // 機能仕様書 3.5「複数プロジェクトの扱い」/ 5.2.5「処理系（致命的）」/ 4.1.5「共通時間軸」を
 // 統括するオーケストレータ。UI層はこのクラスのみを介して読み込み状態を操作する。
 import { toDateKey } from "../calendar/parseDate";
-import type { FatalErrorInfo, Project, TaskId, WarningInfo } from "../types";
+import type { Edge, FatalErrorInfo, Project, Task, TaskId, WarningInfo } from "../types";
 import { LIMITS } from "../validate/limits";
-import { colorFor, generateColorPalette } from "./colorPalette";
+import { generateColorPalette } from "./colorPalette";
 import { processFile, type ProcessedProject } from "./pipeline";
 import {
   detectResourceConflicts,
@@ -24,6 +24,7 @@ export class Workspace {
   private projects = new Map<string, Project>();
   private rawTextByFileName = new Map<string, string>(); // 休日設定ファイル変更時の再計算用
   private taskIdOwner = new Map<TaskId, string>(); // taskId -> fileName（E206判定用）
+  private taskIdsByFileName = new Map<string, TaskId[]>(); // removeFile時の逆引き用
   private taskCountByFileName = new Map<string, number>(); // E401累計判定用（CSV上の生タスク件数）
   private holidayKeys: ReadonlySet<string>;
 
@@ -63,15 +64,17 @@ export class Workspace {
     this.projects.clear();
     this.rawTextByFileName.clear();
     this.taskIdOwner.clear();
+    this.taskIdsByFileName.clear();
     this.taskCountByFileName.clear();
   }
 
   removeFile(fileName: string): void {
     this.rawTextByFileName.delete(fileName);
     this.taskCountByFileName.delete(fileName);
-    for (const id of [...this.taskIdOwner.keys()]) {
-      if (this.taskIdOwner.get(id) === fileName) this.taskIdOwner.delete(id);
+    for (const id of this.taskIdsByFileName.get(fileName) ?? []) {
+      this.taskIdOwner.delete(id);
     }
+    this.taskIdsByFileName.delete(fileName);
     for (const [key, p] of [...this.projects]) {
       if (p.fileName === fileName) this.projects.delete(key);
     }
@@ -153,6 +156,10 @@ export class Workspace {
 
       this.rawTextByFileName.set(file.name, file.text);
       this.taskCountByFileName.set(file.name, taskCountInFile);
+      this.taskIdsByFileName.set(
+        file.name,
+        project.tasks.map((t) => t.id),
+      );
       for (const t of project.tasks) this.taskIdOwner.set(t.id, file.name);
       cumulativeFileCount += 1;
       cumulativeTaskCount += taskCountInFile;
@@ -171,12 +178,32 @@ export class Workspace {
   private registerProject(fileName: string, project: ProcessedProject): string[] {
     const addedKeys: string[] = [];
     const key = this.projectKeyFor(fileName);
-    this.projects.set(key, toNetworkProject(key, fileName, project));
+    this.projects.set(
+      key,
+      toProject(key, fileName, {
+        tasks: project.networkTasks,
+        edges: project.networkEdges,
+        isolated: false,
+        aoa: project.aoa,
+        schedule: project.schedule,
+        mergeBufferCandidates: project.mergeBufferCandidates,
+      }),
+    );
     addedKeys.push(key);
 
     if (project.isolatedTasks.length > 0 && project.isolatedAoa && project.isolatedSchedule) {
       const isolatedKey = `${key}${ISOLATED_KEY_SUFFIX}`;
-      this.projects.set(isolatedKey, toIsolatedProject(isolatedKey, fileName, project));
+      this.projects.set(
+        isolatedKey,
+        toProject(isolatedKey, fileName, {
+          tasks: project.isolatedTasks,
+          edges: [],
+          isolated: true,
+          aoa: project.isolatedAoa,
+          schedule: project.isolatedSchedule,
+          mergeBufferCandidates: [],
+        }),
+      );
       addedKeys.push(isolatedKey);
     }
     return addedKeys;
@@ -224,10 +251,6 @@ export class Workspace {
     return generateColorPalette(names);
   }
 
-  colorForAssignee(assignee: string | undefined): string {
-    return colorFor(this.getColorPalette(), assignee);
-  }
-
   /** 3.5.3: プロジェクト横断のリソース競合を検出する（クリティカルチェーンには反映しない）。 */
   getResourceConflicts(): ResourceConflict[] {
     const input: ProjectArrowTimings[] = [...this.projects.values()].map((p) => ({
@@ -239,39 +262,30 @@ export class Workspace {
   }
 }
 
-function toNetworkProject(key: string, fileName: string, project: ProcessedProject): Project {
+function toProject(
+  key: string,
+  fileName: string,
+  parts: {
+    tasks: Task[];
+    edges: Edge[];
+    isolated: boolean;
+    aoa: ProcessedProject["aoa"];
+    schedule: ProcessedProject["schedule"];
+    mergeBufferCandidates: ProcessedProject["mergeBufferCandidates"];
+  },
+): Project {
   return {
     key,
     fileName,
-    tasks: project.networkTasks,
-    edges: project.networkEdges,
-    isolated: false,
-    events: project.aoa.events,
-    arrows: project.aoa.arrows,
-    eventTimings: project.schedule.eventTimings,
-    arrowTimings: project.schedule.arrowTimings,
-    criticalPaths: project.schedule.criticalPaths,
-    mergeBufferCandidates: project.mergeBufferCandidates,
-    baseDate: null,
-    offsetBusinessDays: 0,
-  };
-}
-
-function toIsolatedProject(key: string, fileName: string, project: ProcessedProject): Project {
-  const aoa = project.isolatedAoa!;
-  const schedule = project.isolatedSchedule!;
-  return {
-    key,
-    fileName,
-    tasks: project.isolatedTasks,
-    edges: [],
-    isolated: true,
-    events: aoa.events,
-    arrows: aoa.arrows,
-    eventTimings: schedule.eventTimings,
-    arrowTimings: schedule.arrowTimings,
-    criticalPaths: schedule.criticalPaths,
-    mergeBufferCandidates: [],
+    tasks: parts.tasks,
+    edges: parts.edges,
+    isolated: parts.isolated,
+    events: parts.aoa.events,
+    arrows: parts.aoa.arrows,
+    eventTimings: parts.schedule.eventTimings,
+    arrowTimings: parts.schedule.arrowTimings,
+    criticalPaths: parts.schedule.criticalPaths,
+    mergeBufferCandidates: parts.mergeBufferCandidates,
     baseDate: null,
     offsetBusinessDays: 0,
   };

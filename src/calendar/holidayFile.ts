@@ -6,6 +6,7 @@ import { parseHolidayDate, toDateKey } from "./parseDate";
 export interface HolidayFileParseResult {
   dateKeys: Set<string>;
   invalidRowCount: number; // W313
+  unreadable: boolean; // W314: 行が1件もない、または全行が不正
 }
 
 /** 休日設定ファイルの CSV テキストを解釈する。不正な行はスキップして継続する（W313）。 */
@@ -24,5 +25,7 @@ export function parseHolidayFile(text: string): HolidayFileParseResult {
     dateKeys.add(toDateKey(date));
   }
 
-  return { dateKeys, invalidRowCount };
+  const unreadable = rows.length === 0 || invalidRowCount >= rows.length;
+
+  return { dateKeys, invalidRowCount, unreadable };
 }

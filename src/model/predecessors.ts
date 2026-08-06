@@ -1,4 +1,6 @@
 // 機能仕様書 3.3「先行タスクの記法」の抽出処理。
+import { splitAndTrim } from "./splitAndTrim";
+
 const PREDECESSORS_LINE_PATTERN = /^先行タスク:(.*)$/gim;
 
 export interface PredecessorsExtractionResult {
@@ -14,10 +16,7 @@ export function extractPredecessors(description: string): PredecessorsExtraction
   }
 
   const firstMatchValue = matches[0]![1] ?? "";
-  const ids = firstMatchValue
-    .split(",")
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0);
+  const ids = splitAndTrim(firstMatchValue, ",");
 
   return { ids, occurrenceCount: matches.length };
 }

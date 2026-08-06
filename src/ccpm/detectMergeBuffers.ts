@@ -9,11 +9,13 @@ import type { Arrow, ArrowTiming, EventId, MergeBufferCandidate } from "../types
 export function detectMergeBufferCandidates(arrowTimings: ArrowTiming[]): MergeBufferCandidate[] {
   const incomingByEvent = new Map<EventId, Arrow[]>();
   const criticalIncomingCount = new Map<EventId, number>();
+  const criticalByArrow = new Map<Arrow, boolean>();
 
   for (const t of arrowTimings) {
     const list = incomingByEvent.get(t.arrow.to) ?? [];
     list.push(t.arrow);
     incomingByEvent.set(t.arrow.to, list);
+    criticalByArrow.set(t.arrow, t.isCritical);
     if (t.isCritical) {
       criticalIncomingCount.set(t.arrow.to, (criticalIncomingCount.get(t.arrow.to) ?? 0) + 1);
     }
@@ -25,10 +27,7 @@ export function detectMergeBufferCandidates(arrowTimings: ArrowTiming[]): MergeB
     const criticalCount = criticalIncomingCount.get(eventId) ?? 0;
     if (criticalCount >= arrows.length) continue; // 全入辺がクリティカルなら候補ではない
 
-    const feedingArrows = arrows.filter((a) => {
-      const timing = arrowTimings.find((t) => t.arrow === a);
-      return !(timing?.isCritical ?? false);
-    });
+    const feedingArrows = arrows.filter((a) => !(criticalByArrow.get(a) ?? false));
     candidates.push({ eventId, feedingArrows });
   }
 
