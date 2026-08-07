@@ -47,6 +47,8 @@ export default tseslint.config(
     rules: {
       "no-undef": "off", // TypeScript コンパイラが検出するため無効化
       "no-restricted-syntax": ["error", ...forbiddenDomApiRules],
+      "no-eval": "error",
+      "no-new-func": "error",
     },
   },
   {
