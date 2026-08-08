@@ -56,6 +56,15 @@ Microsoft 365 Planner の CSV エクスポートからアローダイアグラ�
 - 最小限の範囲：認知負荷を軽減するために、変数の範囲をできるだけ小さく保たなければならない。
 - 読みやすい流れ：コードは物語のように読めるなければならない
 
+### 書き始める前に
+コードを書き始める前に以下のことを実行しなければならない。
+- そもそもこれは構築する必要があるのか確認しなければならない。必要ない場合はユーザーにそのことを提案しなければならない。
+- 既に同様の機能がコードに存在する場合は、既に存在するヘルパー、ユーティリティ、またはパターンを再利用し、書き直してはならない。
+- 標準ライブラリに同様の機能があるか場合は、それを使用しなければならない。
+- プラットフォームのネイティブ機能で対応できるなら、それを使用しなければならない。
+- 既にインストールされている依存関係で解決できるなら、それ使用すべきである。
+- 追加するコードは動作する最小限でなければならない。
+
 ### ルール
 - 関数は20行以内に収めなければならない。必要に応じて、より小さな関数に分割しなければならない。
 - `let`より`const`を優先しなければならない。`var`は使用してはならない。
@@ -206,6 +215,14 @@ npm run format:check      # prettier --check .
 ### セキュリティ: DOM書き込みは `security/dom.ts` のみ
 
 `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` は `security/dom.ts` 以外のすべての箇所で禁止されており、ESLintの `no-restricted-syntax` ルール（`config/eslint.config.js` 参照）で機械的に強制している（慣習ではない）。CSV由来の文字列は必ず `textContent` 経由（`createHtmlElement` の第3引数、または `setText`）で扱う。`setSafeAttribute`／`createHtmlElement` の属性引数は `href`/`xlink:href`/`style`/`on*` を実行時にも拒否する（二次防御）。新規のDOM書き込みコードは必ずこのモジュールを経由すること。
+
+### セキュリティ: 依存関係・シークレット・CIのサプライチェーン対策
+
+- 依存関係の脆弱性対策には Dependabot（[.github/dependabot.yml](.github/dependabot.yml)）を使用し、npm・GitHub Actions の依存を自動チェックしなければならない。
+- シークレット混入の検出には Gitleaks を使用しなければならない。pre-commit フック（`gitleaks protect --staged`）と CI（`gitleaks-action`）の両方で実行しなければならない。ローカルに未導入の場合はコミットが失敗するため、事前に導入すること（`brew install gitleaks`）。
+- `eval`・`Function` コンストラクタ等による動的コード実行を行ってはならない。ESLint の `no-eval`／`no-new-func`（`config/eslint.config.js`）で機械的に強制する。
+- GitHub Actions のサードパーティ Action はタグではなくコミット SHA で固定しなければならない（サプライチェーン攻撃対策）。
+- CI ジョブの権限は必要最小限（例：`permissions: contents: read`）に限定しなければならない。
 
 ### ビルド: 単一ファイル・オフライン・ハッシュ付きCSP
 
