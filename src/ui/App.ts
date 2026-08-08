@@ -12,7 +12,7 @@ import {
   setSafeAttribute,
 } from "../security/dom";
 import type { FatalErrorInfo, WarningInfo } from "../types";
-import { LIMITS } from "../validate/limits";
+import { selectFilesWithinLimits } from "../validate/selectFilesWithinLimits";
 import { Workspace } from "../workspace/Workspace";
 
 const ZOOM_MIN = 0.2;
@@ -151,7 +151,7 @@ export class App {
     const footerRight = createHtmlElement(
       "div",
       { class: "footer-right" },
-      "© Planner CCMP Support / MIT License / Third-party licenses: see LICENSE",
+      "© Planner CCMP Support / MIT License / Third-party licenses: PapaParse (MIT License)",
     );
 
     const footer = createHtmlElement("footer", { class: "app-footer" });
@@ -177,27 +177,10 @@ export class App {
     const files = [...fileList].sort((a, b) => a.name.localeCompare(b.name, "en"));
     const existingFileCount = this.workspace.getLoadedFileCount();
 
-    const preRejected: FatalErrorInfo[] = [];
-    const readable: File[] = [];
-    files.forEach((file, index) => {
-      if (existingFileCount + index + 1 > LIMITS.maxFiles) {
-        preRejected.push({
-          code: "E402",
-          fileName: file.name,
-          message: `読み込み可能なファイル数の上限（${LIMITS.maxFiles}件）を超えています。`,
-        });
-        return;
-      }
-      if (file.size > LIMITS.maxFileSizeBytes) {
-        preRejected.push({
-          code: "E404",
-          fileName: file.name,
-          message: `ファイルサイズが上限（${Math.floor(LIMITS.maxFileSizeBytes / (1024 * 1024))}MB）を超えています。`,
-        });
-        return;
-      }
-      readable.push(file);
-    });
+    const { accepted: readable, rejected: preRejected } = selectFilesWithinLimits(
+      existingFileCount,
+      files,
+    );
 
     const texts = await Promise.all(readable.map((file) => readFileAsText(file)));
     const entries = readable.map((file, i) => ({ name: file.name, text: texts[i]! }));

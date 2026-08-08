@@ -9,8 +9,16 @@ describe("parseCsv", () => {
     ]);
   });
 
-  it("CRLF / LF いずれも改行として扱う", () => {
-    expect(parseCsv("a,b\r\n1,2\n3,4")).toEqual([
+  it("CRLFを改行として扱う", () => {
+    expect(parseCsv("a,b\r\n1,2\r\n3,4")).toEqual([
+      ["a", "b"],
+      ["1", "2"],
+      ["3", "4"],
+    ]);
+  });
+
+  it("LFを改行として扱う", () => {
+    expect(parseCsv("a,b\n1,2\n3,4")).toEqual([
       ["a", "b"],
       ["1", "2"],
       ["3", "4"],
