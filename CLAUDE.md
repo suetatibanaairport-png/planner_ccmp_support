@@ -1,11 +1,11 @@
 # CLAUDE.md
 
-> キーワード：しなければならない/してはならない = 必須、すべきである =　実施しない明確な理由がない限り推奨、してもよい =　任意。
+> キーワード：しなければならない/してはならない = 必須、すべきである/すべきでない =　実施しない明確な理由がない限り推奨、してもよい =　任意。
 
 このファイルは、このリポジトリで作業する Claude Code (claude.ai/code) 向けのガイドです。
 
 ## 概要
-Microsoft 365 Planner の CSV エクスポートからアローダイアグラム（AOA/PERT図）を作成し、CCPM 向けの合流バッファ候補・クリティカルチェーンを算出する、完全オフラインの単一 HTML ファイルツール。バックエンドなし、実行時のネットワーク通信なし — 既定の休日カレンダーを含め、すべてビルド時に1つの `dist/index.html` にバンドルされる。
+Microsoft 365 Planner の CSV エクスポートからアローダイアグラム（AOA/PERT図）を作成し、CCPM 向けの合流バッファ候補・クリティカルチェーンを算出する、完全オフラインの単一 HTML ファイルツール。バックエンドなし、実行時のネットワーク通信なし — 既定の休日カレンダーを含め、すべてビルド時に1つの `dist/Planner_ccmp_support.html` にバンドルされる。
 
 ## ドキュメント
 ### ドキュメント・コードの関係性
@@ -25,6 +25,9 @@ Microsoft 365 Planner の CSV エクスポートからアローダイアグラ�
       - `README.md`:リポジトリを確認する人間に対する情報提供文書。他のドキュメント・コード・コンフィグから内容を収集する。
   - `LICENSE`
 - `CLAUDE.md`
+
+### ドキュメント間の参照の記載
+- 優先度が上位のものから下位ののもに対する参照は記載すべきでない。
 
 ### ドキュメント更新
 タスク（プルリクエストのマージ、コマンドの完了など）を完了したら、ドキュメント類の更新が必要かを実際にドキュメントを参照しない範囲で確認すべきである。更新が必要な場合は更新を提案しなければならない。
@@ -147,7 +150,7 @@ Microsoft 365 Planner の CSV エクスポートからアローダイアグラ�
 
 ```bash
 npm run dev              # vite開発サーバー
-npm run build             # vite build + inject-csp-hash.js（dist/index.html を生成）
+npm run build             # vite build + postbuild.js（dist/Planner_ccmp_support.html を生成）
 npm test                  # vitest run（全テスト。--passWithNoTests は使わない）
 npx vitest run test/aoa/buildAoa.test.ts   # 単一テストファイル
 npx vitest run -t "循環依存"               # 単一テスト（名前指定）
@@ -161,7 +164,7 @@ npm run format:check      # prettier --check .
 
 `git commit` を実行すると、Husky の pre-commit フックが上記すべて（加えて `gitleaks protect --staged`）を実行し、`dist/` を再ビルドしてステージに含める。CI（`main` への push/PR）でも同じチェック（加えて `npm audit --omit=dev --audit-level=high`）が走る。gitleaks はローカルに導入していないとコミットが失敗する（`brew install gitleaks`）。
 
-**`dist/index.html` は `.gitignore` 対象外でリポジトリにコミットする。** 実際の配布物そのもの（利用者はビルドせずダウンロードしてそのまま開く）であるため。ソースとの乖離を作らないこと（pre-commit フックが自動で同期する）。
+**`dist/Planner_ccmp_support.html` は `.gitignore` 対象外でリポジトリにコミットする。** 実際の配布物そのもの（利用者はビルドせずダウンロードしてそのまま開く）であるため。ソースとの乖離を作らないこと（pre-commit フックが自動で同期する）。ファイル名は固定名と定めている（リネームの仕組みは詳細設計書.md 1章参照）。
 
 ### パイプラインのステージ構成（機能仕様書 4.1）
 
@@ -206,7 +209,7 @@ npm run format:check      # prettier --check .
 
 ### ビルド: 単一ファイル・オフライン・ハッシュ付きCSP
 
-`vite-plugin-singlefile` がJS/CSSをすべて1つのHTMLにインライン化する（`file://` での動作に必須 — このスキームではESモジュールと`fetch`がブロックされるため、CSV/休日ファイルの読み込みは`fetch`ではなく`FileReader`を使う）。`scripts/inject-csp-hash.js` がビルド後に実行され、実際にインライン化された `<script>` のSHA-256を計算してCSPの `<meta>` タグの `script-src` に埋め込み、CSPタグがscriptより前に配置されていなければ例外を投げる。既定の休日CSVは `main.ts` で `import ... from "...csv?raw"` により埋め込まれる（実行時に取得することはない）。
+`vite-plugin-singlefile` がJS/CSSをすべて1つのHTMLにインライン化する（`file://` での動作に必須 — このスキームではESモジュールと`fetch`がブロックされるため、CSV/休日ファイルの読み込みは`fetch`ではなく`FileReader`を使う）。`scripts/postbuild.js` がビルド後に実行され、実際にインライン化された `<script>` のSHA-256を計算してCSPの `<meta>` タグの `script-src` に埋め込み、CSPタグがscriptより前に配置されていなければ例外を投げる（あわせて配布物のファイル名リネームも行う。詳細設計書.md 1章参照）。既定の休日CSVは `main.ts` で `import ... from "...csv?raw"` により埋め込まれる（実行時に取得することはない）。
 
 ### テストコード・フィクスチャの配置（`test/`）
 

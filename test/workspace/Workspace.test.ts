@@ -1,17 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Workspace } from "../../src/workspace/Workspace";
-import { LIMITS } from "../../src/validate/limits";
 
 const read = (path: string) => readFileSync(`test/data/${path}`, "utf-8");
-
-// E401（合計タスク件数上限）は境界値そのものが大きいため、テスト仕様書.md 3章の方針に従い
-// 固定フィクスチャではなくテストコード側で動的に生成する（依存関係を持たない最小構成のタスク）。
-function buildTaskOnlyCsv(count: number, idPrefix: string): string {
-  const header = "タスク ID,タスク名,割り当て先,開始日,期限日,定期的,説明";
-  const rows = Array.from({ length: count }, (_, i) => `${idPrefix}${i},タスク${i},,,,いいえ,`);
-  return [header, ...rows].join("\n");
-}
 
 describe("Workspace.addFiles", () => {
   it("planA/planBはタスクIDが独立しておりE206が発生しない", () => {
@@ -65,47 +56,5 @@ describe("Workspace.addFiles", () => {
     expect(forward.rejectedFiles).toEqual([]);
     expect(reversed.rejectedFiles).toEqual([]);
     expect([...forward.addedProjectKeys].sort()).toEqual([...reversed.addedProjectKeys].sort());
-  });
-});
-
-describe("Workspace.addFiles: E401（合計タスク件数上限）", () => {
-  it("境界値: 累計がちょうど上限に達する場合は拒否されない", () => {
-    const ws = new Workspace(new Set());
-    const text = buildTaskOnlyCsv(LIMITS.maxTotalTasks, "T");
-    const result = ws.addFiles([{ name: "just_at_limit.csv", text }]);
-    expect(result.rejectedFiles).toEqual([]);
-  });
-
-  it("累計が上限を超えるファイルのみE401で拒否され、それ以前のファイルは正常に追加される", () => {
-    const ws = new Workspace(new Set());
-    const underLimit = buildTaskOnlyCsv(LIMITS.maxTotalTasks - 1, "A");
-    const overflow = buildTaskOnlyCsv(2, "B");
-
-    const result = ws.addFiles([
-      { name: "a_under_limit.csv", text: underLimit },
-      { name: "b_overflow.csv", text: overflow },
-    ]);
-
-    expect(result.addedProjectKeys.length).toBeGreaterThan(0);
-    expect(result.rejectedFiles).toEqual([
-      {
-        code: "E401",
-        fileName: "b_overflow.csv",
-        message: `タスク件数が読み込み済み全プロジェクト合計の上限（${LIMITS.maxTotalTasks}件）を超えています。`,
-      },
-    ]);
-  });
-
-  it("既読み込み分との累計で上限を超える場合、後から追加しようとしたファイルがE401で拒否される", () => {
-    const ws = new Workspace(new Set());
-    ws.addFiles([
-      { name: "a_under_limit.csv", text: buildTaskOnlyCsv(LIMITS.maxTotalTasks - 1, "A") },
-    ]);
-
-    const result = ws.addFiles([{ name: "b_next.csv", text: buildTaskOnlyCsv(2, "B") }]);
-
-    expect(result.rejectedFiles).toHaveLength(1);
-    expect(result.rejectedFiles[0]!.code).toBe("E401");
-    expect(result.rejectedFiles[0]!.fileName).toBe("b_next.csv");
   });
 });

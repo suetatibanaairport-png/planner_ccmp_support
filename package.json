@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config config/vite.config.ts",
-    "build": "vite build --config config/vite.config.ts && node scripts/inject-csp-hash.js",
+    "build": "vite build --config config/vite.config.ts && node scripts/postbuild.js",
     "preview": "vite preview --config config/vite.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",

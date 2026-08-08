@@ -37,6 +37,10 @@ export default tseslint.config(
     extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
+        // config/ は src/・test/ の祖先ディレクトリではないため、projectService の
+        // 自動探索（祖先ディレクトリを遡る）は tsconfig.json を見つけられない。
+        // 明示的に project を指定する（tsconfig.json の include に含まれない .ts
+        // ファイルを追加した場合はここではなく tsconfig.json 側の include を更新すること）。
         project: ["./tsconfig.json"],
         tsconfigRootDir: import.meta.dirname,
       },

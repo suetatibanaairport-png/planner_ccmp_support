@@ -2,6 +2,7 @@
 // 統括するオーケストレータ。UI層はこのクラスのみを介して読み込み状態を操作する。
 import { toDateKey } from "../calendar/parseDate";
 import type { Edge, FatalErrorInfo, Project, Task, TaskId, WarningInfo } from "../types";
+import { exceedsTotalTaskLimit } from "../validate/exceedsTotalTaskLimit";
 import { LIMITS } from "../validate/limits";
 import { generateColorPalette } from "./colorPalette";
 import { processFile, type ProcessedProject } from "./pipeline";
@@ -145,7 +146,7 @@ export class Workspace {
       }
 
       const taskCountInFile = project.tasks.length;
-      if (cumulativeTaskCount + taskCountInFile > LIMITS.maxTotalTasks) {
+      if (exceedsTotalTaskLimit(cumulativeTaskCount, taskCountInFile)) {
         rejectedFiles.push({
           code: "E401",
           fileName: file.name,

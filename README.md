@@ -1,11 +1,15 @@
-# planner_ccmp_support
+# Planner CCMP Support
 
 Microsoft 365 Planner が出力する CSV からアローダイアグラム（PERT図）を作成し、CCPM 向けの合流バッファ候補・クリティカルチェーンを算出するオフラインツールです。
 
 ## 使い方
 
-ビルド不要です。[dist/index.html](dist/index.html) をダウンロードし、ブラウザ（Edge / Chrome）で開いてください。完全オフラインで動作します。
+ビルド不要です。[dist/Planner_ccmp_support.html](dist/Planner_ccmp_support.html) をダウンロードし、ブラウザ（Edge / Chrome）で開いてください。完全オフラインで動作します。
 
-## 開発
+## ドキュメント
 
-開発方針は [docs/開発ガイド.md](docs/開発ガイド.md) を参照してください。
+背景・目的・要求事項は [docs/要件定義書.md](docs/要件定義書.md)、機能仕様は [docs/機能仕様書.md](docs/機能仕様書.md)、開発方針・コマンドは [docs/開発ガイド.md](docs/開発ガイド.md) を参照してください。
+
+## ライセンス
+
+MIT License。詳細は [LICENSE](LICENSE) を参照してください。
