@@ -1,9 +1,6 @@
-// vite build 完了後（dist/index.html 生成後）に実行する postbuild ステップ。2つの責務を持つ。
-// 1. 機能仕様書 6.3 / 詳細設計書 7.3: CSP の script-src は 'unsafe-inline' を使わず、
-//    ビルド後の実際のインラインスクリプトの SHA-256 ハッシュ値のみを許可する。
-//    <meta> タグの script-src プレースホルダーをこのハッシュ値で置き換える。
-// 2. 配布物のファイル名を要件定義書 5.2 で定めた固定名にリネームする
-//    （vite の入力ファイルは dev サーバーの既定エントリのため index.html のままとする）。
+// vite build 後（dist/index.html 生成後）に実行する postbuild ステップ。
+// 1. CSP の script-src ハッシュを算出し、<meta> タグのプレースホルダーを置き換える（機能仕様書 6.3 / 詳細設計書 7.3）
+// 2. 配布物のファイル名を固定名にリネームする（vite 入力ファイルは dev サーバー既定エントリのため index.html のまま。要件定義書 5.2）
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, renameSync } from "node:fs";
 import { fileURLToPath } from "node:url";

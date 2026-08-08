@@ -1,5 +1,4 @@
-// 機能仕様書 3.5「複数プロジェクトの扱い」/ 5.2.5「処理系（致命的）」/ 4.1.5「共通時間軸」を
-// 統括するオーケストレータ。UI層はこのクラスのみを介して読み込み状態を操作する。
+// 機能仕様書 3.5/5.2.5/4.1.5 を統括するオーケストレータ。UI層はこのクラスのみを介して読み込み状態を操作する。
 import { toDateKey } from "../calendar/parseDate";
 import type { Edge, FatalErrorInfo, Project, Task, TaskId, WarningInfo } from "../types";
 import { exceedsTotalTaskLimit } from "../validate/exceedsTotalTaskLimit";

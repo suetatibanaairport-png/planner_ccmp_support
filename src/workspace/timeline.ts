@@ -1,5 +1,5 @@
-// 機能仕様書 4.1.5「共通時間軸への変換」の実装。
-// CPM計算（ES/LS）はプロジェクトごとの相対値のまま保ち、表示位置決定のためのオフセットのみをここで求める。
+// 機能仕様書 4.1.5「共通時間軸への変換」の実装。CPM計算（ES/LS）は相対値のまま保ち、
+// 表示位置用のオフセットのみここで求める。
 import { businessDayOffset, nextOrSameBusinessDay } from "../calendar/businessDays";
 import { parseTaskDate, toDateKey } from "../calendar/parseDate";
 import type { Edge, Task } from "../types";

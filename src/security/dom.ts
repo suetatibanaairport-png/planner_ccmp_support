@@ -1,7 +1,7 @@
-// 機能仕様書 6.2 / 詳細設計書 7.1「DOM API の使用ルール」を実装する唯一の窓口。
-// このファイル以外で innerHTML / outerHTML / insertAdjacentHTML / document.write を使用しない。
-// CSV由来の文字列は textContent 経由でのみ表示し、setAttribute には
-// 危険な属性名（href, xlink:href, style, on*, 属性名/要素名そのもの）を渡さない。
+// 機能仕様書 6.2 / 詳細設計書 7.1「DOM API の使用ルール」を実装する唯一の窓口。innerHTML /
+// outerHTML / insertAdjacentHTML / document.write はこのファイル以外で使用しない。CSV由来の
+// 文字列は textContent 経由でのみ表示し、setAttribute には危険な属性名（href, xlink:href,
+// style, on*, 属性名/要素名そのもの）を渡さない。
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 

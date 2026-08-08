@@ -1,13 +1,11 @@
-// ESLint フラット設定。
-// src/ 配下と vite.config.ts は TypeScript（型情報付きルール）、scripts/ 配下は
-// tsconfig 管理外の Node スクリプトのため型情報なしのJSルールのみを適用する。
+// ESLint フラット設定。src/ 配下と vite.config.ts は TypeScript（型情報付きルール）、
+// scripts/ 配下は tsconfig 管理外の Node スクリプトのため型情報なしのJSルールのみ適用する。
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import globals from "globals";
 import eslintConfigPrettier from "eslint-config-prettier";
 
-// 詳細設計書 7.1 / 機能仕様書 6.2: innerHTML 等の危険な DOM API は
-// security/dom.ts 以外での使用を禁止する（唯一の窓口とする）。
+// 詳細設計書 7.1 / 機能仕様書 6.2: innerHTML 等の危険な DOM API は security/dom.ts 以外で禁止する。
 const forbiddenDomApiRules = [
   {
     selector:
@@ -37,10 +35,8 @@ export default tseslint.config(
     extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
-        // config/ は src/・test/ の祖先ディレクトリではないため、projectService の
-        // 自動探索（祖先ディレクトリを遡る）は tsconfig.json を見つけられない。
-        // 明示的に project を指定する（tsconfig.json の include に含まれない .ts
-        // ファイルを追加した場合はここではなく tsconfig.json 側の include を更新すること）。
+        // config/ は src/・test/ の祖先ディレクトリでないため projectService の自動探索が効かず、
+        // 明示的に project を指定する（対象外の .ts を追加した場合は tsconfig.json の include を更新）。
         project: ["./tsconfig.json"],
         tsconfigRootDir: import.meta.dirname,
       },

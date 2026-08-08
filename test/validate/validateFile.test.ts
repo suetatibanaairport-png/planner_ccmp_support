@@ -95,8 +95,8 @@ describe("processFile: 所要日数由来の警告（W304〜W308）", () => {
     const r = processFile("f.csv", csv, new Set());
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    // このCSVは1タスクのみで割り当て先・先行タスクの記載もないため、
-    // W304/W305 (本題) に加えて W309/W310/W311 も付随して発生する。
+    // このCSVは1タスクのみで割り当て先・先行タスクもないため、W304/W305（本題）に加え
+    // W309/W310/W311 も付随して発生する。
     const codes = r.project.warnings.map((w) => w.code);
     expect(codes).toContain("W304");
     expect(codes).toContain("W305");

@@ -1,5 +1,5 @@
-// 機能仕様書 1.4「画面構成」の組み立て。ヘッダー・メイン領域（図＋ズーム／パン＋パネル）・
-// フッター（休日設定ファイル／エラー表示／凡例ボタン、著作権表示）を構築する。
+// 機能仕様書 1.4「画面構成」の組み立て：ヘッダー・メイン領域（図＋ズーム／パン＋パネル）・
+// フッター（休日設定ファイル／エラー表示／凡例ボタン、著作権表示）。
 import { parseHolidayFile } from "../calendar/holidayFile";
 import { layoutWorkspace } from "../layout/layoutWorkspace";
 import { DEFAULT_DIAGRAM_CONFIG, renderDiagram } from "../render/renderDiagram";
