@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { Workspace } from "./Workspace";
+import { Workspace } from "../../src/workspace/Workspace";
 
-const read = (path: string) => readFileSync(`test_data/${path}`, "utf-8");
+const read = (path: string) => readFileSync(`test/data/${path}`, "utf-8");
 
 describe("Workspace.addFiles", () => {
   it("planA/planBはタスクIDが独立しておりE206が発生しない", () => {
@@ -41,5 +41,20 @@ describe("Workspace.addFiles", () => {
     ws.removeFile("a.csv");
     const result = ws.addFiles([{ name: "b.csv", text }]);
     expect(result.rejectedFiles).toEqual([]);
+  });
+
+  it("選択順に依らずファイル名昇順で処理される（結果が選択順に依存しない）", () => {
+    const files = [
+      { name: "z_serial.csv", text: read("minimal/serial_ja.csv") },
+      { name: "a_branch.csv", text: read("minimal/branch_merge_ja.csv") },
+      { name: "m_cross.csv", text: read("minimal/cross_dependency_ja.csv") },
+    ];
+
+    const forward = new Workspace(new Set()).addFiles(files);
+    const reversed = new Workspace(new Set()).addFiles([...files].reverse());
+
+    expect(forward.rejectedFiles).toEqual([]);
+    expect(reversed.rejectedFiles).toEqual([]);
+    expect([...forward.addedProjectKeys].sort()).toEqual([...reversed.addedProjectKeys].sort());
   });
 });

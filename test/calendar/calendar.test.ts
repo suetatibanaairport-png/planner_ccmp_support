@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { computeDuration } from "./businessDays";
-import { parseHolidayFile } from "./holidayFile";
-import { parseHolidayDate, parseTaskDate } from "./parseDate";
+import { computeDuration } from "../../src/calendar/businessDays";
+import { parseHolidayFile } from "../../src/calendar/holidayFile";
+import { parseHolidayDate, parseTaskDate } from "../../src/calendar/parseDate";
 
 const NO_HOLIDAYS = new Set<string>();
 const d = (s: string) => parseTaskDate(s)!;
@@ -47,12 +47,33 @@ describe("computeDuration", () => {
     expect(computeDuration(d("2026/01/05"), d("2026/01/05"), NO_HOLIDAYS).businessDays).toBe(1);
   });
 
+  it("金〜月は2営業日（土日をまたぐ）", () => {
+    expect(computeDuration(d("2026/01/09"), d("2026/01/12"), NO_HOLIDAYS).businessDays).toBe(2);
+  });
+
+  it("月をまたぐ期間", () => {
+    // 2026/01/29(木)〜02/02(月): 木金月の3営業日（土日を除く）
+    expect(computeDuration(d("2026/01/29"), d("2026/02/02"), NO_HOLIDAYS).businessDays).toBe(3);
+  });
+
+  it("年をまたぐ期間", () => {
+    // 2025/12/29(月)〜2026/01/02(金): 平日5日連続
+    expect(computeDuration(d("2025/12/29"), d("2026/01/02"), NO_HOLIDAYS).businessDays).toBe(5);
+  });
+
   it("開始日・期限日いずれかがnullなら3日仮置き", () => {
     expect(computeDuration(null, d("2026/01/05"), NO_HOLIDAYS)).toEqual({
       businessDays: 3,
       placeholder: true,
     });
     expect(computeDuration(d("2026/01/05"), null, NO_HOLIDAYS)).toEqual({
+      businessDays: 3,
+      placeholder: true,
+    });
+  });
+
+  it("開始日・期限日ともにnullでも3日仮置き（片方nullと同じ結果）", () => {
+    expect(computeDuration(null, null, NO_HOLIDAYS)).toEqual({
       businessDays: 3,
       placeholder: true,
     });
@@ -74,7 +95,7 @@ describe("computeDuration", () => {
 
 describe("parseHolidayFile", () => {
   it("正常行3件・不正行4件で W313 相当（unreadable=false）", () => {
-    const text = readFileSync("test_data/holidays_invalid_rows_ja.csv", "utf-8");
+    const text = readFileSync("test/data/holidays_invalid_rows_ja.csv", "utf-8");
     const parsed = parseHolidayFile(text);
     expect(parsed.unreadable).toBe(false);
     expect(parsed.invalidRowCount).toBe(4);

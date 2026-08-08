@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { createHtmlElement, setSafeAttribute } from "./dom";
+import {
+  createHtmlElement,
+  createSvgElement,
+  setSafeAttribute,
+  setSwatchColor,
+} from "../../src/security/dom";
 
 const XSS_PAYLOADS = [
   "<script>alert(1)</script>",
@@ -39,5 +44,27 @@ describe("setSafeAttribute: 危険な属性名を拒否する", () => {
     const el = createHtmlElement("div");
     expect(() => setSafeAttribute(el, "class", "foo")).not.toThrow();
     expect(el.getAttribute("class")).toBe("foo");
+  });
+});
+
+describe("createSvgElement: SVG名前空間で生成され、XSS文字列はテキストのみ扱う", () => {
+  it("SVG名前空間の要素を生成する", () => {
+    const el = createSvgElement("text", {}, "タスクA");
+    expect(el.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(el.textContent).toBe("タスクA");
+  });
+
+  it.each(XSS_PAYLOADS)("payload %s はDOM要素を生成せず文字として表示される", (payload) => {
+    const el = createSvgElement("text", {}, payload);
+    expect(el.children.length).toBe(0);
+    expect(el.textContent).toBe(payload);
+  });
+});
+
+describe("setSwatchColor: 背景色のみを設定する", () => {
+  it("style.backgroundColor に反映される", () => {
+    const el = createHtmlElement("span");
+    setSwatchColor(el, "rgb(1, 2, 3)");
+    expect(el.style.backgroundColor).toBe("rgb(1, 2, 3)");
   });
 });

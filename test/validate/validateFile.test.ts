@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { processFile } from "../workspace/pipeline";
-import { validateFile } from "./validateFile";
+import { processFile } from "../../src/workspace/pipeline";
+import { validateFile } from "../../src/validate/validateFile";
 
-const read = (path: string) => readFileSync(`test_data/${path}`, "utf-8");
+const read = (path: string) => readFileSync(`test/data/${path}`, "utf-8");
 
 describe("validateFile: 致命的エラー", () => {
   it.each([
@@ -28,6 +28,23 @@ describe("validateFile: 致命的エラー", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.tasks.map((t) => t.id)).toEqual(["DC001", "DC002"]);
+  });
+});
+
+describe("validateFile: 上限値の境界（ちょうど上限＝合格するはず）", () => {
+  it("担当者20名ちょうどはE405にならない", () => {
+    const assignees = Array.from({ length: 20 }, (_, i) => `担当者${i + 1}`).join(";");
+    const csv = `タスク ID,タスク名,割り当て先,説明\nT1,タスクA,${assignees},説明\n`;
+    const r = validateFile("f.csv", csv);
+    expect(r.ok).toBe(true);
+  });
+
+  it("タスク名200文字・説明5000文字ちょうどはE406にならない", () => {
+    const name = "あ".repeat(200);
+    const desc = "い".repeat(5000);
+    const csv = `タスク ID,タスク名,説明\nT1,${name},${desc}\n`;
+    const r = validateFile("f.csv", csv);
+    expect(r.ok).toBe(true);
   });
 });
 
@@ -71,5 +88,17 @@ describe("processFile: 所要日数由来の警告（W304〜W308）", () => {
         "W312",
       ].sort(),
     );
+  });
+
+  it("開始日・期限日がともに空欄の場合、W304とW305が両方発生する", () => {
+    const csv = "タスク ID,タスク名,開始日,期限日,説明\nT1,タスクA,,,説明\n";
+    const r = processFile("f.csv", csv, new Set());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // このCSVは1タスクのみで割り当て先・先行タスクの記載もないため、
+    // W304/W305 (本題) に加えて W309/W310/W311 も付随して発生する。
+    const codes = r.project.warnings.map((w) => w.code);
+    expect(codes).toContain("W304");
+    expect(codes).toContain("W305");
   });
 });

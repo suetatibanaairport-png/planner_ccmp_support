@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCsv, toRecords } from "./parseCsv";
+import { parseCsv, toRecords } from "../../src/csv/parseCsv";
 
 describe("parseCsv", () => {
   it("BOM を除去する", () => {
@@ -37,6 +37,14 @@ describe("parseCsv", () => {
   it("空文字列は0行", () => {
     expect(parseCsv("")).toEqual([]);
   });
+
+  it("コーナーケース: BOM・CRLF・引用符内改行・エスケープが同時に存在する", () => {
+    const text = '﻿col1,"multi\r\nline""quoted""",col3\r\ndata1,data2,data3\r\n';
+    expect(parseCsv(text)).toEqual([
+      ["col1", 'multi\r\nline"quoted"', "col3"],
+      ["data1", "data2", "data3"],
+    ]);
+  });
 });
 
 describe("toRecords", () => {
@@ -51,5 +59,29 @@ describe("toRecords", () => {
 
   it("行数がヘッダーのみの場合は空配列", () => {
     expect(toRecords([["a", "b"]]).records).toEqual([]);
+  });
+
+  it("行の列数がヘッダーより少ない場合、不足分は空文字で埋める", () => {
+    const { records } = toRecords([
+      ["a", "b", "c"],
+      ["1", "2"],
+    ]);
+    expect(records).toEqual([{ a: "1", b: "2", c: "" }]);
+  });
+
+  it("行の列数がヘッダーより多い場合、余分な列は無視する（意図的な非対称性）", () => {
+    const { records } = toRecords([
+      ["a", "b"],
+      ["1", "2", "3"],
+    ]);
+    expect(records).toEqual([{ a: "1", b: "2" }]);
+  });
+
+  it("ヘッダー名が重複する場合、後の列の値で上書きされる（意図的な非対称性、静かな上書き）", () => {
+    const { records } = toRecords([
+      ["a", "a"],
+      ["1", "2"],
+    ]);
+    expect(records).toEqual([{ a: "2" }]);
   });
 });
