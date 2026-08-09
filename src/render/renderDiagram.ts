@@ -13,22 +13,29 @@ export interface DiagramConfig {
   normalStrokeWidth: number;
   criticalStrokeWidth: number;
   padding: number;
+  axisHeight: number;
 }
 
 export const DEFAULT_DIAGRAM_CONFIG: DiagramConfig = {
   pixelsPerDay: 48,
   rowHeight: 56,
-  nodeRadius: 6,
-  mergeBufferRadius: 11,
+  nodeRadius: 9,
+  mergeBufferRadius: 13,
   normalStrokeWidth: 1.5,
   criticalStrokeWidth: 3.5,
   padding: 24,
+  axisHeight: 28,
 };
 
 const DUMMY_COLOR = "#9aa0a6"; // 無彩色（4.2.4「ダミー」）
 const BOUNDARY_COLOR = "#c4c7cc"; // プロジェクト境界のグレーの水平線（4.2.4）
 const NODE_FILL = "#ffffff";
 const NODE_STROKE = "#4b5563";
+const GRID_COLOR = "#eef0f2"; // 背景の縦グリッド（営業日の目盛り）
+const AXIS_TEXT_COLOR = "#6b7280";
+const AXIS_LINE_COLOR = "#c4c7cc";
+const NODE_LABEL_COLOR = "#4b5563";
+const TASK_LABEL_FONT_SIZE = 10;
 
 /** 読み込み済み全プロジェクトを1つのSVGにレンダリングする（4.2.4）。 */
 export function renderDiagram(
@@ -54,7 +61,7 @@ export function renderDiagram(
 
   const totalRows = workspace.projects.reduce((sum, pl) => sum + pl.rowCount, 0);
   const width = (maxX - minX) * config.pixelsPerDay + config.padding * 2 + config.nodeRadius * 2;
-  const height = Math.max(totalRows, 1) * config.rowHeight + config.padding * 2;
+  const height = Math.max(totalRows, 1) * config.rowHeight + config.padding * 2 + config.axisHeight;
 
   const svg = createSvgElement("svg", {
     width,
@@ -64,14 +71,56 @@ export function renderDiagram(
 
   const toPixelX = (x: number): number => config.padding + (x - minX) * config.pixelsPerDay;
   const toPixelY = (pl: ProjectLayout, row: number): number =>
-    config.padding + (pl.topRow + row) * config.rowHeight + config.rowHeight / 2;
+    config.axisHeight +
+    config.padding +
+    (pl.topRow + row) * config.rowHeight +
+    config.rowHeight / 2;
+
+  const firstDay = Math.floor(minX);
+  const lastDay = Math.ceil(maxX);
+  for (let day = firstDay; day <= lastDay; day++) {
+    const x = toPixelX(day);
+    svg.appendChild(
+      createSvgElement("line", {
+        x1: x,
+        y1: config.axisHeight,
+        x2: x,
+        y2: height,
+        stroke: GRID_COLOR,
+        "stroke-width": 1,
+      }),
+    );
+    svg.appendChild(
+      createSvgElement(
+        "text",
+        {
+          x,
+          y: config.axisHeight - 10,
+          "text-anchor": "middle",
+          "font-size": 10,
+          fill: AXIS_TEXT_COLOR,
+        },
+        String(day),
+      ),
+    );
+  }
+  svg.appendChild(
+    createSvgElement("line", {
+      x1: 0,
+      y1: config.axisHeight,
+      x2: width,
+      y2: config.axisHeight,
+      stroke: AXIS_LINE_COLOR,
+      "stroke-width": 1,
+    }),
+  );
 
   for (const pl of workspace.projects) {
     const project = projectByKey.get(pl.projectKey);
     if (!project) continue;
 
     if (pl.topRow > 0) {
-      const y = config.padding + pl.topRow * config.rowHeight;
+      const y = config.axisHeight + config.padding + pl.topRow * config.rowHeight;
       svg.appendChild(
         createSvgElement("line", {
           x1: 0,
@@ -85,6 +134,7 @@ export function renderDiagram(
     }
 
     const mergeBufferEventIds = new Set(project.mergeBufferCandidates.map((c) => c.eventId));
+    const taskById = new Map(project.tasks.map((t) => [t.id, t]));
 
     for (const timing of project.arrowTimings) {
       const fromPos = pl.positions.get(timing.arrow.from);
@@ -112,6 +162,34 @@ export function renderDiagram(
         attrs["stroke-dasharray"] = "5 4";
       }
       svg.appendChild(createSvgElement("polyline", attrs));
+
+      const task = timing.arrow.taskId ? taskById.get(timing.arrow.taskId) : undefined;
+      if (task && task.name) {
+        // ラベルはエッジの水平区間（折れ線の最後の線分）の上に配置する。ジグザグ（仮置き）は
+        // 始点・終点を結ぶ直線の中点上に置く。
+        const [sx, sy] = timing.arrow.placeholder
+          ? [x1, Math.min(y1, y2)]
+          : points[points.length - 2]!;
+        const [ex] = timing.arrow.placeholder ? [x2] : points[points.length - 1]!;
+        const labelX = (sx + ex) / 2;
+        const labelY = sy - 6;
+        const label = truncateLabel(Math.abs(ex - sx), task.name);
+        if (label) {
+          svg.appendChild(
+            createSvgElement(
+              "text",
+              {
+                x: labelX,
+                y: labelY,
+                "text-anchor": "middle",
+                "font-size": TASK_LABEL_FONT_SIZE,
+                fill: strokeColor,
+              },
+              label,
+            ),
+          );
+        }
+      }
     }
 
     for (const event of project.events) {
@@ -130,10 +208,34 @@ export function renderDiagram(
           "stroke-width": isMergeBuffer ? 2.5 : 1.5,
         }),
       );
+      svg.appendChild(
+        createSvgElement(
+          "text",
+          {
+            x: cx,
+            y: cy,
+            "text-anchor": "middle",
+            "dominant-baseline": "central",
+            "font-size": isMergeBuffer ? 10 : 9,
+            fill: NODE_LABEL_COLOR,
+          },
+          String(event.number),
+        ),
+      );
     }
   }
 
   return svg;
+}
+
+/** タスク名がエッジの表示幅に収まらない場合、末尾を省略する（和欧混在を考慮した概算幅）。 */
+function truncateLabel(availableWidthPx: number, name: string): string {
+  const avgCharWidthPx = TASK_LABEL_FONT_SIZE * 0.9;
+  const maxChars = Math.floor(availableWidthPx / avgCharWidthPx);
+  if (maxChars <= 0) return "";
+  if (name.length <= maxChars) return name;
+  if (maxChars === 1) return "…";
+  return `${name.slice(0, maxChars - 1)}…`;
 }
 
 const DIAGONAL_RUN = 24; // 分岐部の斜め線がX方向に進む長さ（px）

@@ -4,15 +4,15 @@ import type { Task } from "../types";
 import { splitAndTrim } from "./splitAndTrim";
 
 const COLUMNS = {
-  taskId: "タスク ID",
+  taskId: "タスクID",
   taskName: "タスク名",
-  bucketName: "バケット名",
-  progress: "進捗状況",
-  assignees: "割り当て先",
+  bucketName: "バケット",
+  progress: "状況",
+  assignees: "担当者",
   startDate: "開始日",
-  dueDate: "期限日",
+  dueDate: "期限",
   recurring: "定期的",
-  description: "説明",
+  description: "メモ",
 } as const;
 
 const REQUIRED_COLUMNS = [COLUMNS.taskId, COLUMNS.taskName, COLUMNS.description];

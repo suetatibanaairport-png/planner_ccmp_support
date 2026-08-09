@@ -102,22 +102,61 @@ function layoutProjectRows(
     const iterLayers = forward ? layers : [...layers].reverse();
     const neighborsOf = forward ? predecessors : successors;
     for (const layer of iterLayers) {
-      const barycenter = new Map<EventId, number>();
+      const desired = new Map<EventId, number>();
       for (const id of layer) {
         const neighbors = neighborsOf.get(id) ?? [];
         if (neighbors.length === 0) {
-          barycenter.set(id, order.get(id) ?? 0);
+          desired.set(id, order.get(id) ?? 0);
         } else {
           const sum = neighbors.reduce((acc, n) => acc + (order.get(n) ?? 0), 0);
-          barycenter.set(id, sum / neighbors.length);
+          desired.set(id, sum / neighbors.length);
         }
       }
-      layer.sort((a, b) => (barycenter.get(a) ?? 0) - (barycenter.get(b) ?? 0));
-      layer.forEach((id, idx) => order.set(id, idx));
+      // 希望位置(desired)が同点の兄弟は、直前の並び順で安定ソートし、分岐が親を中心に
+      // 上下対称に広がるよう最小間隔1を保ったまま実現する（PAVA、後述）。
+      layer.sort((a, b) => (desired.get(a) ?? 0) - (desired.get(b) ?? 0));
+      const resolved = resolveMonotonicPositions(layer.map((id) => desired.get(id) ?? 0));
+      layer.forEach((id, idx) => order.set(id, resolved[idx]!));
+    }
+  }
+
+  if (order.size > 0) {
+    const minRow = Math.min(...order.values());
+    if (minRow !== 0) {
+      for (const [id, row] of order) order.set(id, row - minRow);
     }
   }
 
   return order;
+}
+
+/**
+ * 希望位置(desired)の順序を保ったまま、隣接要素間の最小間隔を1として、各要素をできるだけ
+ * 希望位置に近づける（最小二乗）。等調回帰(PAVA)の適用により、単一の親を持つ兄弟同士が同じ
+ * 希望位置（＝親の行）を持つ場合、結果は親の行を中心に上下対称に広がる。
+ */
+function resolveMonotonicPositions(desired: number[]): number[] {
+  const n = desired.length;
+  if (n === 0) return [];
+
+  // 間隔1の制約を「非減少列」に帰着させるため、各要素からインデックス分をあらかじめ引く。
+  const blocks: Array<{ value: number; weight: number }> = [];
+  for (let i = 0; i < n; i++) {
+    let value = desired[i]! - i;
+    let weight = 1;
+    while (blocks.length > 0 && blocks[blocks.length - 1]!.value > value) {
+      const prev = blocks.pop()!;
+      value = (value * weight + prev.value * prev.weight) / (weight + prev.weight);
+      weight += prev.weight;
+    }
+    blocks.push({ value, weight });
+  }
+
+  const flat: number[] = [];
+  for (const block of blocks) {
+    for (let k = 0; k < block.weight; k++) flat.push(block.value);
+  }
+  return flat.map((v, i) => v + i);
 }
 
 /** イベントを層（同一ES相当のグループ）に分ける。層番号はトポロジカル順の最長経路長で近似する。 */

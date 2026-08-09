@@ -34,15 +34,15 @@ describe("validateFile: 致命的エラー", () => {
 describe("validateFile: 上限値の境界（ちょうど上限＝合格するはず）", () => {
   it("担当者20名ちょうどはE405にならない", () => {
     const assignees = Array.from({ length: 20 }, (_, i) => `担当者${i + 1}`).join(";");
-    const csv = `タスク ID,タスク名,割り当て先,説明\nT1,タスクA,${assignees},説明\n`;
+    const csv = `タスクID,タスク名,担当者,メモ\nT1,タスクA,${assignees},メモ\n`;
     const r = validateFile("f.csv", csv);
     expect(r.ok).toBe(true);
   });
 
-  it("タスク名200文字・説明5000文字ちょうどはE406にならない", () => {
+  it("タスク名200文字・メモ5000文字ちょうどはE406にならない", () => {
     const name = "あ".repeat(200);
     const desc = "い".repeat(5000);
-    const csv = `タスク ID,タスク名,説明\nT1,${name},${desc}\n`;
+    const csv = `タスクID,タスク名,メモ\nT1,${name},${desc}\n`;
     const r = validateFile("f.csv", csv);
     expect(r.ok).toBe(true);
   });
@@ -91,7 +91,7 @@ describe("processFile: 所要日数由来の警告（W304〜W308）", () => {
   });
 
   it("開始日・期限日がともに空欄の場合、W304とW305が両方発生する", () => {
-    const csv = "タスク ID,タスク名,開始日,期限日,説明\nT1,タスクA,,,説明\n";
+    const csv = "タスクID,タスク名,開始日,期限,メモ\nT1,タスクA,,,メモ\n";
     const r = processFile("f.csv", csv, new Set());
     expect(r.ok).toBe(true);
     if (!r.ok) return;

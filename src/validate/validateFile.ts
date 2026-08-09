@@ -34,9 +34,9 @@ export function validateFile(fileName: string, text: string): FileValidationResu
 
   const { header, records } = toRecords(rows);
 
-  // E103: 必須列（タスクID／タスク名／説明）が存在しない
+  // E103: 必須列（タスクID／タスク名／メモ）が存在しない
   if (!hasRequiredColumns(header)) {
-    return fatal("E103", fileName, "必須列（タスクID／タスク名／説明）が見つかりません。");
+    return fatal("E103", fileName, "必須列（タスクID／タスク名／メモ）が見つかりません。");
   }
 
   // E105: データ行が0件
@@ -89,13 +89,13 @@ export function validateFile(fileName: string, text: string): FileValidationResu
       );
     }
 
-    // W309: 割り当て先が空欄
+    // W309: 担当者が空欄
     if (task.assignees.length === 0) {
       warnings.push({
         code: "W309",
         fileName,
         taskId: task.id,
-        message: "割り当て先が空欄です。「未アサイン」として扱います。",
+        message: "担当者が空欄です。「未アサイン」として扱います。",
       });
     }
 
