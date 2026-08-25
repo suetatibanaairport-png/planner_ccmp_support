@@ -195,7 +195,7 @@ npm run format:check      # prettier --check .
 | モジュール | 責務 |
 | --- | --- |
 | `csv/` | RFC 4180 準拠のCSVパース。[PapaParse](https://www.papaparse.com/)を`src/csv/parseCsv.ts`でラップする |
-| `model/` | CSV行 → `Task` への正規化、`先行タスク:` の抽出 |
+| `model/` | CSV行 → `Task` への正規化、`後続タスク:` の抽出 |
 | `validate/` | ファイル単位のエラー・警告判定（エラー仕様書のエラーコード） |
 | `calendar/` | 営業日計算、タスク/休日それぞれの日付パース（書式が異なる。下記参照） |
 | `graph/` | AONグラフ構築、トポロジカルソート、循環検出（E203）、孤立タスク分離 |

@@ -14,6 +14,7 @@ import {
 import type { FatalErrorInfo, WarningInfo } from "../types";
 import { selectFilesWithinLimits } from "../validate/selectFilesWithinLimits";
 import { Workspace } from "../workspace/Workspace";
+import { computeFitScale } from "./fitScale";
 
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 5;
@@ -230,9 +231,6 @@ export class App {
     this.workspace.reset();
     this.allErrors = [];
     this.allWarnings = [];
-    this.scale = 1;
-    this.translateX = 0;
-    this.translateY = 0;
     this.rerender();
   }
 
@@ -244,12 +242,26 @@ export class App {
     clearChildren(this.diagramLayer);
     const svg = renderDiagram(layout, projects, palette, DEFAULT_DIAGRAM_CONFIG);
     this.diagramLayer.appendChild(svg);
-    this.applyTransform();
+    this.fitToView(svg);
 
     renderErrorPanel(this.errorPanel, this.allErrors);
     renderWarningList(this.warningPanel, this.allWarnings);
     renderLegend(this.legendPanel, palette);
     updateErrorBadge(this.errorBadge, this.allErrors.length);
+  }
+
+  /** 読み込み直後に図全体が収まるよう、拡大率をビューポートに合わせ直す。 */
+  private fitToView(svg: SVGSVGElement): void {
+    this.scale = computeFitScale(
+      Number(svg.getAttribute("width")),
+      Number(svg.getAttribute("height")),
+      this.diagramViewport.clientWidth,
+      this.diagramViewport.clientHeight,
+      ZOOM_MIN,
+    );
+    this.translateX = 0;
+    this.translateY = 0;
+    this.applyTransform();
   }
 
   private wireZoomPan(): void {

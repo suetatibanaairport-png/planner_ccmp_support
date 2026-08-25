@@ -49,7 +49,7 @@ describe("validateFile: 上限値の境界（ちょうど上限＝合格する�
 });
 
 describe("validateFile: 警告", () => {
-  it("先行タスク記載なしファイルは W310", () => {
+  it("後続タスク記載なしファイルは W310", () => {
     const r = validateFile("f.csv", read("errors/w310_no_predecessors_ja.csv"));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -95,7 +95,7 @@ describe("processFile: 所要日数由来の警告（W304〜W308）", () => {
     const r = processFile("f.csv", csv, new Set());
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    // このCSVは1タスクのみで割り当て先・先行タスクもないため、W304/W305（本題）に加え
+    // このCSVは1タスクのみで割り当て先・後続タスクもないため、W304/W305（本題）に加え
     // W309/W310/W311 も付随して発生する。
     const codes = r.project.warnings.map((w) => w.code);
     expect(codes).toContain("W304");

@@ -13,17 +13,19 @@ export interface DiagramConfig {
   normalStrokeWidth: number;
   criticalStrokeWidth: number;
   padding: number;
+  labelFontSize: number;
   axisHeight: number;
 }
 
 export const DEFAULT_DIAGRAM_CONFIG: DiagramConfig = {
-  pixelsPerDay: 48,
-  rowHeight: 56,
-  nodeRadius: 9,
-  mergeBufferRadius: 13,
+  pixelsPerDay: 24,
+  rowHeight: 84,
+  nodeRadius: 6,
+  mergeBufferRadius: 11,
   normalStrokeWidth: 1.5,
-  criticalStrokeWidth: 3.5,
+  criticalStrokeWidth: 5,
   padding: 24,
+  labelFontSize: 10,
   axisHeight: 28,
 };
 
@@ -31,11 +33,10 @@ const DUMMY_COLOR = "#9aa0a6"; // 無彩色（4.2.4「ダミー」）
 const BOUNDARY_COLOR = "#c4c7cc"; // プロジェクト境界のグレーの水平線（4.2.4）
 const NODE_FILL = "#ffffff";
 const NODE_STROKE = "#4b5563";
+const LABEL_OFFSET_Y = 4; // タスク名ラベルと矢線の間の余白（px）
 const GRID_COLOR = "#eef0f2"; // 背景の縦グリッド（営業日の目盛り）
 const AXIS_TEXT_COLOR = "#6b7280";
 const AXIS_LINE_COLOR = "#c4c7cc";
-const NODE_LABEL_COLOR = "#4b5563";
-const TASK_LABEL_FONT_SIZE = 10;
 
 /** 読み込み済み全プロジェクトを1つのSVGにレンダリングする（4.2.4）。 */
 export function renderDiagram(
@@ -134,7 +135,7 @@ export function renderDiagram(
     }
 
     const mergeBufferEventIds = new Set(project.mergeBufferCandidates.map((c) => c.eventId));
-    const taskById = new Map(project.tasks.map((t) => [t.id, t]));
+    const taskNameById = new Map(project.tasks.map((t) => [t.id, t.name]));
 
     for (const timing of project.arrowTimings) {
       const fromPos = pl.positions.get(timing.arrow.from);
@@ -163,32 +164,22 @@ export function renderDiagram(
       }
       svg.appendChild(createSvgElement("polyline", attrs));
 
-      const task = timing.arrow.taskId ? taskById.get(timing.arrow.taskId) : undefined;
-      if (task && task.name) {
-        // ラベルはエッジの水平区間（折れ線の最後の線分）の上に配置する。ジグザグ（仮置き）は
-        // 始点・終点を結ぶ直線の中点上に置く。
-        const [sx, sy] = timing.arrow.placeholder
-          ? [x1, Math.min(y1, y2)]
-          : points[points.length - 2]!;
-        const [ex] = timing.arrow.placeholder ? [x2] : points[points.length - 1]!;
-        const labelX = (sx + ex) / 2;
-        const labelY = sy - 6;
-        const label = truncateLabel(Math.abs(ex - sx), task.name);
-        if (label) {
-          svg.appendChild(
-            createSvgElement(
-              "text",
-              {
-                x: labelX,
-                y: labelY,
-                "text-anchor": "middle",
-                "font-size": TASK_LABEL_FONT_SIZE,
-                fill: strokeColor,
-              },
-              label,
-            ),
-          );
-        }
+      const taskName = timing.arrow.taskId ? taskNameById.get(timing.arrow.taskId) : undefined;
+      if (taskName) {
+        const [labelX, labelY] = labelAnchor(points);
+        svg.appendChild(
+          createSvgElement(
+            "text",
+            {
+              x: labelX,
+              y: labelY - LABEL_OFFSET_Y,
+              "text-anchor": "middle",
+              "font-size": config.labelFontSize,
+              fill: NODE_STROKE,
+            },
+            taskName,
+          ),
+        );
       }
     }
 
@@ -208,34 +199,21 @@ export function renderDiagram(
           "stroke-width": isMergeBuffer ? 2.5 : 1.5,
         }),
       );
-      svg.appendChild(
-        createSvgElement(
-          "text",
-          {
-            x: cx,
-            y: cy,
-            "text-anchor": "middle",
-            "dominant-baseline": "central",
-            "font-size": isMergeBuffer ? 10 : 9,
-            fill: NODE_LABEL_COLOR,
-          },
-          String(event.number),
-        ),
-      );
     }
   }
 
   return svg;
 }
 
-/** タスク名がエッジの表示幅に収まらない場合、末尾を省略する（和欧混在を考慮した概算幅）。 */
-function truncateLabel(availableWidthPx: number, name: string): string {
-  const avgCharWidthPx = TASK_LABEL_FONT_SIZE * 0.9;
-  const maxChars = Math.floor(availableWidthPx / avgCharWidthPx);
-  if (maxChars <= 0) return "";
-  if (name.length <= maxChars) return name;
-  if (maxChars === 1) return "…";
-  return `${name.slice(0, maxChars - 1)}…`;
+/**
+ * タスク名ラベルの位置を、矢線の末尾区間（折れ線なら合流先の行に落ち着いた水平区間）の
+ * 中点から求める。始点・終点だけから中点を取ると、行の高さが離れているほど実際の線から
+ * 離れた位置に浮いてしまうため、実際に描画される区間を使う。
+ */
+function labelAnchor(points: ReadonlyArray<[number, number]>): [number, number] {
+  const [ex1, ey1] = points[points.length - 2] ?? points[0]!;
+  const [ex2, ey2] = points[points.length - 1]!;
+  return [(ex1 + ex2) / 2, Math.min(ey1, ey2)];
 }
 
 const DIAGONAL_RUN = 24; // 分岐部の斜め線がX方向に進む長さ（px）

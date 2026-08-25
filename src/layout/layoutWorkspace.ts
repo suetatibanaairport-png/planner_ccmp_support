@@ -34,7 +34,7 @@ export function layoutWorkspace(projects: readonly Project[]): WorkspaceLayout {
   let nextTopRow = 0;
 
   for (const project of displayOrder) {
-    const rows = layoutProjectRows(project.events, project.arrows);
+    const rows = layoutProjectRows(project.events, project.arrows, project.criticalPaths);
     const rowCount = rows.size === 0 ? 0 : Math.max(...rows.values()) + 1;
     const esByEventId = new Map(project.eventTimings.map((t) => [t.eventId, t.es]));
 
@@ -61,12 +61,118 @@ export function layoutWorkspace(projects: readonly Project[]): WorkspaceLayout {
   return { projects: result };
 }
 
+/** 最初のクリティカルパス（criticalPaths[0]）が通る全イベントIDを集める。複数存在する場合は代表1本のみを扱う。 */
+function criticalBackboneEventIds(criticalPaths: Project["criticalPaths"]): Set<EventId> {
+  const backbone = criticalPaths[0];
+  if (!backbone) return new Set();
+
+  const ids = new Set<EventId>();
+  for (const arrow of backbone) {
+    ids.add(arrow.from);
+    ids.add(arrow.to);
+  }
+  return ids;
+}
+
 /**
- * プロジェクト内イベントの縦方向スロットをバリセンター法で求める（詳細設計書6章）。
- * ESが等しいイベント同士（同じX位置）を「層」とみなし、隣接層の平均位置に基づいて
- * 前進・後進を交互に繰り返し並べ替える。層内での位置がそのままスロット番号になる。
+ * プロジェクト内イベントの縦方向スロットを求める（詳細設計書6章）。
+ * 代表クリティカルパス（criticalPaths[0]、backbone）は行0に固定して一直線に配置する。
+ * backbone以外のイベントは、backboneを経由しない矢線でつながった連結成分＝「分岐」ごとに
+ * 1つの行帯を専有する。分岐が占める層の範囲（分離してから合流するまでの長さの近似）が
+ * 短いものほどbackboneに近い帯に、長いものほど遠い帯に配置する。分岐内部の並びは通常の
+ * バリセンター法（computeRowsForSubgraph）で決める。
  */
 function layoutProjectRows(
+  events: readonly Event[],
+  arrows: Project["arrows"],
+  criticalPaths: Project["criticalPaths"],
+): Map<EventId, number> {
+  if (events.length === 0) return new Map();
+
+  const backboneIds = criticalBackboneEventIds(criticalPaths);
+  const numberOf = new Map(events.map((e) => [e.id, e.number]));
+  const layerOf = computeLayerOf(events, arrows);
+  const eventById = new Map(events.map((e) => [e.id, e]));
+
+  const order = new Map<EventId, number>();
+  for (const id of backboneIds) order.set(id, 0);
+
+  const branches = groupNonBackboneBranches(events, arrows, backboneIds).map((branchIds) => {
+    const branchIdSet = new Set(branchIds);
+    const branchEvents = branchIds.map((id) => eventById.get(id)!);
+    const branchArrows = arrows.filter((a) => branchIdSet.has(a.from) && branchIdSet.has(a.to));
+    const localRows = computeRowsForSubgraph(branchEvents, branchArrows);
+    const width = localRows.size === 0 ? 0 : Math.max(...localRows.values()) + 1;
+    const layers = branchIds.map((id) => layerOf.get(id) ?? 0);
+    return {
+      branchIds,
+      localRows,
+      width,
+      length: Math.max(...layers) - Math.min(...layers),
+      minLayer: Math.min(...layers),
+      minNumber: Math.min(...branchIds.map((id) => numberOf.get(id) ?? 0)),
+    };
+  });
+
+  // 短い分岐（backboneから分離して合流するまでが短いもの）から順にbackboneの近くへ詰める。
+  branches.sort((a, b) => {
+    if (a.length !== b.length) return a.length - b.length;
+    if (a.minLayer !== b.minLayer) return a.minLayer - b.minLayer;
+    return a.minNumber - b.minNumber;
+  });
+
+  let nextRow = backboneIds.size > 0 ? 1 : 0;
+  for (const branch of branches) {
+    for (const id of branch.branchIds) {
+      order.set(id, nextRow + (branch.localRows.get(id) ?? 0));
+    }
+    nextRow += branch.width;
+  }
+
+  return order;
+}
+
+/** backboneに属さないイベントを、backboneを経由しない矢線でつながったグループ（分岐）に分ける。 */
+function groupNonBackboneBranches(
+  events: readonly Event[],
+  arrows: Project["arrows"],
+  backboneIds: ReadonlySet<EventId>,
+): EventId[][] {
+  const nonBackbone = events.filter((e) => !backboneIds.has(e.id));
+  const parent = new Map<EventId, EventId>();
+  for (const e of nonBackbone) parent.set(e.id, e.id);
+
+  const find = (id: EventId): EventId => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    return root;
+  };
+  const union = (a: EventId, b: EventId): void => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootA, rootB);
+  };
+
+  for (const a of arrows) {
+    if (!backboneIds.has(a.from) && !backboneIds.has(a.to)) union(a.from, a.to);
+  }
+
+  const groups = new Map<EventId, EventId[]>();
+  for (const e of nonBackbone) {
+    const root = find(e.id);
+    const arr = groups.get(root) ?? [];
+    arr.push(e.id);
+    groups.set(root, arr);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * イベント集合の縦方向スロットをバリセンター法で求める。ESが等しいイベント同士（同じX位置）を
+ * 「層」とみなし、隣接層の平均位置に基づいて前進・後進を交互に繰り返し並べ替える。
+ * 層内での位置がそのままスロット番号になる。
+ */
+function computeRowsForSubgraph(
   events: readonly Event[],
   arrows: Project["arrows"],
 ): Map<EventId, number> {
@@ -92,8 +198,7 @@ function layoutProjectRows(
 
   const order = new Map<EventId, number>();
   for (const layer of layers) {
-    layer.sort((a, b) => numberOf.get(a)! - numberOf.get(b)!);
-    layer.forEach((id, idx) => order.set(id, idx));
+    assignRowsByOrder(layer, (id) => numberOf.get(id)!, order);
   }
 
   const PASSES = 4;
@@ -102,65 +207,35 @@ function layoutProjectRows(
     const iterLayers = forward ? layers : [...layers].reverse();
     const neighborsOf = forward ? predecessors : successors;
     for (const layer of iterLayers) {
-      const desired = new Map<EventId, number>();
+      const barycenter = new Map<EventId, number>();
       for (const id of layer) {
         const neighbors = neighborsOf.get(id) ?? [];
         if (neighbors.length === 0) {
-          desired.set(id, order.get(id) ?? 0);
+          barycenter.set(id, order.get(id) ?? 0);
         } else {
           const sum = neighbors.reduce((acc, n) => acc + (order.get(n) ?? 0), 0);
-          desired.set(id, sum / neighbors.length);
+          barycenter.set(id, sum / neighbors.length);
         }
       }
-      // 希望位置(desired)が同点の兄弟は、直前の並び順で安定ソートし、分岐が親を中心に
-      // 上下対称に広がるよう最小間隔1を保ったまま実現する（PAVA、後述）。
-      layer.sort((a, b) => (desired.get(a) ?? 0) - (desired.get(b) ?? 0));
-      const resolved = resolveMonotonicPositions(layer.map((id) => desired.get(id) ?? 0));
-      layer.forEach((id, idx) => order.set(id, resolved[idx]!));
-    }
-  }
-
-  if (order.size > 0) {
-    const minRow = Math.min(...order.values());
-    if (minRow !== 0) {
-      for (const [id, row] of order) order.set(id, row - minRow);
+      assignRowsByOrder(layer, (id) => barycenter.get(id) ?? 0, order);
     }
   }
 
   return order;
 }
 
-/**
- * 希望位置(desired)の順序を保ったまま、隣接要素間の最小間隔を1として、各要素をできるだけ
- * 希望位置に近づける（最小二乗）。等調回帰(PAVA)の適用により、単一の親を持つ兄弟同士が同じ
- * 希望位置（＝親の行）を持つ場合、結果は親の行を中心に上下対称に広がる。
- */
-function resolveMonotonicPositions(desired: number[]): number[] {
-  const n = desired.length;
-  if (n === 0) return [];
-
-  // 間隔1の制約を「非減少列」に帰着させるため、各要素からインデックス分をあらかじめ引く。
-  const blocks: Array<{ value: number; weight: number }> = [];
-  for (let i = 0; i < n; i++) {
-    let value = desired[i]! - i;
-    let weight = 1;
-    while (blocks.length > 0 && blocks[blocks.length - 1]!.value > value) {
-      const prev = blocks.pop()!;
-      value = (value * weight + prev.value * prev.weight) / (weight + prev.weight);
-      weight += prev.weight;
-    }
-    blocks.push({ value, weight });
-  }
-
-  const flat: number[] = [];
-  for (const block of blocks) {
-    for (let k = 0; k < block.weight; k++) flat.push(block.value);
-  }
-  return flat.map((v, i) => v + i);
+/** 層内をkeyOf昇順に並べ、その順番をそのまま行番号として確定する。 */
+function assignRowsByOrder(
+  layer: EventId[],
+  keyOf: (id: EventId) => number,
+  order: Map<EventId, number>,
+): void {
+  layer.sort((a, b) => keyOf(a) - keyOf(b));
+  layer.forEach((id, idx) => order.set(id, idx));
 }
 
-/** イベントを層（同一ES相当のグループ）に分ける。層番号はトポロジカル順の最長経路長で近似する。 */
-function groupByLayer(events: readonly Event[], arrows: Project["arrows"]): EventId[][] {
+/** イベントごとの層番号（トポロジカル順の最長経路長による近似）を求める。 */
+function computeLayerOf(events: readonly Event[], arrows: Project["arrows"]): Map<EventId, number> {
   const byNumber = [...events].sort((a, b) => a.number - b.number);
   const incoming = new Map<EventId, EventId[]>();
   for (const e of events) incoming.set(e.id, []);
@@ -180,6 +255,13 @@ function groupByLayer(events: readonly Event[], arrows: Project["arrows"]): Even
     }
     layerOf.set(e.id, max);
   }
+  return layerOf;
+}
+
+/** イベントを層（同一ES相当のグループ）に分ける。層番号はトポロジカル順の最長経路長で近似する。 */
+function groupByLayer(events: readonly Event[], arrows: Project["arrows"]): EventId[][] {
+  const byNumber = [...events].sort((a, b) => a.number - b.number);
+  const layerOf = computeLayerOf(events, arrows);
 
   const byLayer = new Map<number, EventId[]>();
   for (const e of byNumber) {

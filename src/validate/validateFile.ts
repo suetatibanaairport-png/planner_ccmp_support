@@ -2,7 +2,7 @@
 // E205/E206（複数ファイルにまたがる判定）は workspace/ 側で行う。
 import { parseCsv, toRecords } from "../csv/parseCsv";
 import { hasRequiredColumns, normalizeTask } from "../model/normalizeTask";
-import { extractPredecessors } from "../model/predecessors";
+import { extractSuccessors } from "../model/successors";
 import type { Edge, FatalErrorInfo, Task, WarningInfo } from "../types";
 import { LIMITS } from "./limits";
 
@@ -111,63 +111,63 @@ export function validateFile(fileName: string, text: string): FileValidationResu
     );
   }
 
-  // 先行タスク抽出 → 依存辺の構築
+  // 後続タスク抽出 → 依存辺の構築
   const taskIds = new Set(tasks.map((t) => t.id));
   const edges: Edge[] = [];
-  let anyPredecessorsDeclared = false;
+  let anySuccessorsDeclared = false;
 
   for (const task of tasks) {
-    const { ids, occurrenceCount } = extractPredecessors(task.description);
+    const { ids, occurrenceCount } = extractSuccessors(task.description);
 
-    // E204: 説明欄に 先行タスク: が複数回出現している
+    // E204: 説明欄に 後続タスク: が複数回出現している
     if (occurrenceCount >= 2) {
       return fatal(
         "E204",
         fileName,
-        `タスク ID "${task.id}" の説明欄に 先行タスク: が複数回出現しています。`,
+        `タスク ID "${task.id}" の説明欄に 後続タスク: が複数回出現しています。`,
       );
     }
 
     if (occurrenceCount === 1) {
-      anyPredecessorsDeclared = true;
+      anySuccessorsDeclared = true;
     }
 
-    const seenPredecessorIds = new Set<string>();
-    for (const predecessorId of ids) {
+    const seenSuccessorIds = new Set<string>();
+    for (const successorId of ids) {
       // W302: 自己参照
-      if (predecessorId === task.id) {
+      if (successorId === task.id) {
         warnings.push({
           code: "W302",
           fileName,
           taskId: task.id,
-          message: "自分自身を先行タスクに指定しています。この依存辺は無視します。",
+          message: "自分自身を後続タスクに指定しています。この依存辺は無視します。",
         });
         continue;
       }
-      // W303: 同一の先行IDが重複記載されている
-      if (seenPredecessorIds.has(predecessorId)) {
+      // W303: 同一の後続IDが重複記載されている
+      if (seenSuccessorIds.has(successorId)) {
         warnings.push({
           code: "W303",
           fileName,
           taskId: task.id,
-          message: `先行タスク ID "${predecessorId}" が重複して記載されています。`,
+          message: `後続タスク ID "${successorId}" が重複して記載されています。`,
         });
         continue;
       }
-      seenPredecessorIds.add(predecessorId);
+      seenSuccessorIds.add(successorId);
 
-      // W301: 先行タスクの参照先IDが存在しない
-      if (!taskIds.has(predecessorId)) {
+      // W301: 後続タスクの参照先IDが存在しない
+      if (!taskIds.has(successorId)) {
         warnings.push({
           code: "W301",
           fileName,
           taskId: task.id,
-          message: `先行タスク ID "${predecessorId}" が見つかりません。この依存辺は無視します。`,
+          message: `後続タスク ID "${successorId}" が見つかりません。この依存辺は無視します。`,
         });
         continue;
       }
 
-      edges.push({ from: predecessorId, to: task.id });
+      edges.push({ from: task.id, to: successorId });
     }
 
     // W312: 定期的＝はい のタスク（対応範囲外）
@@ -181,12 +181,12 @@ export function validateFile(fileName: string, text: string): FileValidationResu
     }
   }
 
-  // W310: 先行タスクの記載が1件もない
-  if (!anyPredecessorsDeclared) {
+  // W310: 後続タスクの記載が1件もない
+  if (!anySuccessorsDeclared) {
     warnings.push({
       code: "W310",
       fileName,
-      message: "このファイルには 先行タスク: の記載が1件もありません。",
+      message: "このファイルには 後続タスク: の記載が1件もありません。",
     });
   }
 
