@@ -61,9 +61,12 @@ export function layoutWorkspace(projects: readonly Project[]): WorkspaceLayout {
   return { projects: result };
 }
 
-/** 最初のクリティカルパス（criticalPaths[0]）が通る全イベントIDを集める。複数存在する場合は代表1本のみを扱う。 */
+/**
+ * 代表クリティカルパスが通る全イベントIDを集める。複数存在する場合は、登場する担当者数
+ * （重複除く）が最小のパスを代表として選ぶ（同数の場合はcriticalPaths内の出現順で先勝ち）。
+ */
 function criticalBackboneEventIds(criticalPaths: Project["criticalPaths"]): Set<EventId> {
-  const backbone = criticalPaths[0];
+  const backbone = selectBackbonePath(criticalPaths);
   if (!backbone) return new Set();
 
   const ids = new Set<EventId>();
@@ -74,9 +77,27 @@ function criticalBackboneEventIds(criticalPaths: Project["criticalPaths"]): Set<
   return ids;
 }
 
+/** 複数のクリティカルパスから、登場する担当者数（重複除く）が最小の1本を選ぶ。 */
+function selectBackbonePath(
+  criticalPaths: Project["criticalPaths"],
+): Project["criticalPaths"][number] | undefined {
+  let best: Project["criticalPaths"][number] | undefined;
+  let bestAssigneeCount = Infinity;
+  for (const path of criticalPaths) {
+    const assignees = new Set(
+      path.map((a) => a.assignee).filter((a): a is string => a !== undefined),
+    );
+    if (assignees.size < bestAssigneeCount) {
+      best = path;
+      bestAssigneeCount = assignees.size;
+    }
+  }
+  return best;
+}
+
 /**
  * プロジェクト内イベントの縦方向スロットを求める（詳細設計書6章）。
- * 代表クリティカルパス（criticalPaths[0]、backbone）は行0に固定して一直線に配置する。
+ * 代表クリティカルパス（selectBackbonePathで選んだbackbone）は行0に固定して一直線に配置する。
  * backbone以外のイベントは、backboneを経由しない矢線でつながった連結成分＝「分岐」ごとに
  * 1つの行帯を専有する。分岐が占める層の範囲（分離してから合流するまでの長さの近似）が
  * 短いものから順に、backboneに最も近い空き行（findInnerRowStart）へ詰める。層の範囲が

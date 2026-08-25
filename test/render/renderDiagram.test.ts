@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { layoutWorkspace } from "../../src/layout/layoutWorkspace";
+import type { ProjectLayout, WorkspaceLayout } from "../../src/layout/layoutWorkspace";
 import { DEFAULT_DIAGRAM_CONFIG, renderDiagram } from "../../src/render/renderDiagram";
 import type { Arrow, Event, EventTiming, Project, Task } from "../../src/types";
 
@@ -110,6 +111,69 @@ describe("renderDiagram: タスク名ラベル", () => {
 
     const svg = renderProject(p);
     expect(taskNameLabels(svg)).toHaveLength(0);
+  });
+});
+
+describe("renderDiagram: ダミー矢線の折れ線形状", () => {
+  it("行が異なる場合、合流イベントの直前まで先行イベントと同じ行（水平線）を保ち、末尾だけ斜めになる", () => {
+    const events: Event[] = [
+      { id: "N0", number: 0 },
+      { id: "N1", number: 1 },
+    ];
+    const arrow: Arrow = {
+      from: "N0",
+      to: "N1",
+      kind: "dummy",
+      durationBusinessDays: 0,
+      placeholder: false,
+    };
+    const p: Project = {
+      key: "p1",
+      fileName: "p1.csv",
+      tasks: [],
+      edges: [],
+      isolated: false,
+      events,
+      arrows: [arrow],
+      eventTimings: [
+        { eventId: "N0", es: 0, ls: 0 },
+        { eventId: "N1", es: 3, ls: 3 },
+      ],
+      arrowTimings: [{ arrow, es: 0, ef: 0, ls: 0, lf: 0, totalFloat: 0, isCritical: false }],
+      criticalPaths: [],
+      mergeBufferCandidates: [],
+      baseDate: null,
+      offsetBusinessDays: 0,
+    };
+    const layout: ProjectLayout = {
+      projectKey: "p1",
+      fileName: "p1.csv",
+      isolated: false,
+      topRow: 0,
+      rowCount: 2,
+      positions: new Map([
+        ["N0", { x: 0, row: 0 }],
+        ["N1", { x: 3, row: 1 }],
+      ]),
+    };
+    const workspace: WorkspaceLayout = { projects: [layout] };
+
+    const svg = renderDiagram(workspace, [p], new Map());
+    const polyline = svg.querySelector("polyline[stroke-dasharray]");
+    expect(polyline).not.toBeNull();
+    const points = polyline!
+      .getAttribute("points")!
+      .split(" ")
+      .map((pair) => pair.split(",").map(Number));
+    expect(points).toHaveLength(3);
+    const [[, y0], [x1, y1], [, y2]] = points as [
+      [number, number],
+      [number, number],
+      [number, number],
+    ];
+    expect(y1).toBe(y0); // 折れ点までは先行イベント（N0）と同じ行の高さ
+    expect(y2).not.toBe(y0); // 合流イベント（N1）の行には末尾でのみ切り替わる
+    expect(x1).toBeLessThan(points[2]![0]!); // 折れ点は終点の手前
   });
 });
 

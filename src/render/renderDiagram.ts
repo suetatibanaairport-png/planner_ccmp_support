@@ -147,10 +147,10 @@ export function renderDiagram(
       const x2 = toPixelX(toPos.x);
       const y2 = toPixelY(pl, toPos.row);
 
+      const isDummy = timing.arrow.kind === "dummy";
       const points = timing.arrow.placeholder
         ? zigzagPoints(x1, y1, x2, y2)
-        : elbowPoints(x1, y1, x2, y2);
-      const isDummy = timing.arrow.kind === "dummy";
+        : elbowPoints(x1, y1, x2, y2, isDummy);
       const strokeColor = isDummy ? DUMMY_COLOR : colorFor(colorPalette, timing.arrow.assignee);
 
       const attrs: Record<string, string | number> = {
@@ -218,14 +218,32 @@ function labelAnchor(points: ReadonlyArray<[number, number]>): [number, number] 
 
 const DIAGONAL_RUN = 24; // 分岐部の斜め線がX方向に進む長さ（px）
 
-/** 折れ線（ノード→斜め線→水平線→ノード）で2点を結ぶ（4.2.4「矢線の描画」）。 */
-function elbowPoints(x1: number, y1: number, x2: number, y2: number): Array<[number, number]> {
+/**
+ * 折れ線で2点を結ぶ（4.2.4「矢線の描画」）。通常の矢線はノード→斜め線→水平線→ノードの順
+ * （終点の行に早く合流し、大半を終点側の行で水平に進む）。ダミー矢線（isDummy）は逆に
+ * ノード→水平線→斜め線→ノードの順とし、合流イベントの直前まで先行タスクと同じ行を保つ。
+ */
+function elbowPoints(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  isDummy = false,
+): Array<[number, number]> {
   if (y1 === y2)
     return [
       [x1, y1],
       [x2, y2],
     ];
   const run = Math.min(DIAGONAL_RUN, Math.abs(x2 - x1) / 2);
+  if (isDummy) {
+    const kinkX = x2 - run;
+    return [
+      [x1, y1],
+      [kinkX, y1],
+      [x2, y2],
+    ];
+  }
   const kinkX = x1 + run;
   return [
     [x1, y1],

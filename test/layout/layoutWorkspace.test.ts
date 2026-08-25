@@ -367,4 +367,66 @@ describe("layoutWorkspace", () => {
     expect(pRow).not.toBe(0);
     expect(qRow).toBe(pRow);
   });
+
+  it("クリティカルパスが複数ある場合、登場する担当者数が最小のパスが行0（最上段）になる", () => {
+    // 経路1（N0→A→D）: 担当者2名。経路2（N0→B→D）: 担当者1名（最小のためbackboneに選ばれるべき）。
+    const events: Event[] = [
+      { id: "N0", number: 0 },
+      { id: "A", number: 1 },
+      { id: "B", number: 2 },
+      { id: "D", number: 3 },
+    ];
+    const arrowN0A: Arrow = {
+      from: "N0",
+      to: "A",
+      kind: "activity",
+      taskId: "A",
+      assignee: "Alice",
+      durationBusinessDays: 1,
+      placeholder: false,
+    };
+    const arrowAD: Arrow = {
+      from: "A",
+      to: "D",
+      kind: "activity",
+      taskId: "AD",
+      assignee: "Bob",
+      durationBusinessDays: 1,
+      placeholder: false,
+    };
+    const arrowN0B: Arrow = {
+      from: "N0",
+      to: "B",
+      kind: "activity",
+      taskId: "B",
+      assignee: "Carol",
+      durationBusinessDays: 1,
+      placeholder: false,
+    };
+    const arrowBD: Arrow = {
+      from: "B",
+      to: "D",
+      kind: "activity",
+      taskId: "BD",
+      assignee: "Carol",
+      durationBusinessDays: 1,
+      placeholder: false,
+    };
+    const p = project({
+      key: "p1",
+      events,
+      arrows: [arrowN0A, arrowAD, arrowN0B, arrowBD],
+      eventTimings: events.map((e) => ({ eventId: e.id, es: 0, ls: 0 })),
+      criticalPaths: [
+        [arrowN0A, arrowAD], // 担当者2名（Alice, Bob）
+        [arrowN0B, arrowBD], // 担当者1名（Carol）← こちらが最小
+      ],
+    });
+
+    const layout = layoutWorkspace([p]);
+    const positions = layout.projects[0]!.positions;
+    expect(positions.get("B")!.row).toBe(0);
+    expect(positions.get("D")!.row).toBe(0);
+    expect(positions.get("A")!.row).not.toBe(0);
+  });
 });
