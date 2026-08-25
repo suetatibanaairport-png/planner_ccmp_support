@@ -79,8 +79,9 @@ function criticalBackboneEventIds(criticalPaths: Project["criticalPaths"]): Set<
  * 代表クリティカルパス（criticalPaths[0]、backbone）は行0に固定して一直線に配置する。
  * backbone以外のイベントは、backboneを経由しない矢線でつながった連結成分＝「分岐」ごとに
  * 1つの行帯を専有する。分岐が占める層の範囲（分離してから合流するまでの長さの近似）が
- * 短いものほどbackboneに近い帯に、長いものほど遠い帯に配置する。分岐内部の並びは通常の
- * バリセンター法（computeRowsForSubgraph）で決める。
+ * 短いものから順に、backboneに最も近い空き行（findInnerRowStart）へ詰める。層の範囲が
+ * 重ならない分岐同士は同じ行を共有し、重なる場合のみ外側へ新しい帯を追加する。分岐内部の
+ * 並びは通常のバリセンター法（computeRowsForSubgraph）で決める。
  */
 function layoutProjectRows(
   events: readonly Event[],
@@ -104,12 +105,15 @@ function layoutProjectRows(
     const localRows = computeRowsForSubgraph(branchEvents, branchArrows);
     const width = localRows.size === 0 ? 0 : Math.max(...localRows.values()) + 1;
     const layers = branchIds.map((id) => layerOf.get(id) ?? 0);
+    const minLayer = Math.min(...layers);
+    const maxLayer = Math.max(...layers);
     return {
       branchIds,
       localRows,
       width,
-      length: Math.max(...layers) - Math.min(...layers),
-      minLayer: Math.min(...layers),
+      length: maxLayer - minLayer,
+      minLayer,
+      maxLayer,
       minNumber: Math.min(...branchIds.map((id) => numberOf.get(id) ?? 0)),
     };
   });
@@ -121,15 +125,72 @@ function layoutProjectRows(
     return a.minNumber - b.minNumber;
   });
 
-  let nextRow = backboneIds.size > 0 ? 1 : 0;
+  const minRowStart = backboneIds.size > 0 ? 1 : 0;
+  const placedBands: PlacedBand[] = [];
   for (const branch of branches) {
+    const rowStart = findInnerRowStart(
+      placedBands,
+      branch.width,
+      branch.minLayer,
+      branch.maxLayer,
+      minRowStart,
+    );
     for (const id of branch.branchIds) {
-      order.set(id, nextRow + (branch.localRows.get(id) ?? 0));
+      order.set(id, rowStart + (branch.localRows.get(id) ?? 0));
     }
-    nextRow += branch.width;
+    placedBands.push({
+      rowStart,
+      rowEnd: rowStart + branch.width,
+      minLayer: branch.minLayer,
+      maxLayer: branch.maxLayer,
+    });
   }
 
   return order;
+}
+
+interface PlacedBand {
+  rowStart: number;
+  rowEnd: number; // 排他的境界
+  minLayer: number;
+  maxLayer: number;
+}
+
+/** 行範囲・層範囲がともに重なっているかを判定する。 */
+function overlaps(
+  band: PlacedBand,
+  rowStart: number,
+  rowEnd: number,
+  minLayer: number,
+  maxLayer: number,
+): boolean {
+  const rowsOverlap = rowStart < band.rowEnd && band.rowStart < rowEnd;
+  const layersOverlap = minLayer <= band.maxLayer && band.minLayer <= maxLayer;
+  return rowsOverlap && layersOverlap;
+}
+
+/**
+ * backboneに最も近い（＝最小の）行のうち、配置済みのどの分岐とも
+ * （行範囲・層範囲の両方で）重ならない開始行を探す。層の範囲が重ならない分岐同士は
+ * 同じ行を共有できるため、時間的に重ならない分岐が行を再利用できるようになる。
+ * 空きがなければ、配置済み全体の外側（最大rowEnd）に新しい帯を追加する。
+ */
+function findInnerRowStart(
+  placedBands: readonly PlacedBand[],
+  width: number,
+  minLayer: number,
+  maxLayer: number,
+  minRowStart: number,
+): number {
+  const outerEdge = placedBands.reduce((max, band) => Math.max(max, band.rowEnd), minRowStart);
+  for (let rowStart = minRowStart; rowStart < outerEdge; rowStart++) {
+    const rowEnd = rowStart + width;
+    const conflict = placedBands.some((band) =>
+      overlaps(band, rowStart, rowEnd, minLayer, maxLayer),
+    );
+    if (!conflict) return rowStart;
+  }
+  return outerEdge;
 }
 
 /** backboneに属さないイベントを、backboneを経由しない矢線でつながったグループ（分岐）に分ける。 */

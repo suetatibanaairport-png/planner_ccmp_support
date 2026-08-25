@@ -309,4 +309,62 @@ describe("layoutWorkspace", () => {
     expect(positions.get("L2")!.row).toBe(lRow);
     expect(positions.get("L3")!.row).toBe(lRow);
   });
+
+  it("backboneから見て時間的に重ならない2つの分岐は、同じ行を共有する", () => {
+    // backbone: N0→B1→B2→B3→D。分岐P: N0→P→D（前半区間で分離・合流）。
+    // 分岐Q: B2→Q→D（後半区間で分離・合流）。PとQは層の範囲が重ならないため、
+    // 常に新しい帯を追加するだけの実装では別々の行に、行を再利用する実装では同じ行になる。
+    const events: Event[] = [
+      { id: "N0", number: 0 },
+      { id: "B1", number: 1 },
+      { id: "P", number: 2 },
+      { id: "B2", number: 3 },
+      { id: "Q", number: 4 },
+      { id: "B3", number: 5 },
+      { id: "D", number: 6 },
+    ];
+    const critical = (from: EventId, to: EventId): Arrow => ({
+      from,
+      to,
+      kind: "activity",
+      taskId: `${from}-${to}`,
+      durationBusinessDays: 1,
+      placeholder: false,
+    });
+    const dummy = (from: EventId, to: EventId): Arrow => ({
+      from,
+      to,
+      kind: "dummy",
+      durationBusinessDays: 0,
+      placeholder: false,
+    });
+    const arrowN0B1 = critical("N0", "B1");
+    const arrowB1B2 = critical("B1", "B2");
+    const arrowB2B3 = critical("B2", "B3");
+    const arrowB3D = critical("B3", "D");
+    const arrows: Arrow[] = [
+      arrowN0B1,
+      arrowB1B2,
+      arrowB2B3,
+      arrowB3D,
+      dummy("N0", "P"),
+      dummy("P", "D"),
+      dummy("B2", "Q"),
+      dummy("Q", "D"),
+    ];
+    const p = project({
+      key: "p1",
+      events,
+      arrows,
+      eventTimings: events.map((e) => ({ eventId: e.id, es: 0, ls: 0 })),
+      criticalPaths: [[arrowN0B1, arrowB1B2, arrowB2B3, arrowB3D]],
+    });
+
+    const layout = layoutWorkspace([p]);
+    const positions = layout.projects[0]!.positions;
+    const pRow = positions.get("P")!.row;
+    const qRow = positions.get("Q")!.row;
+    expect(pRow).not.toBe(0);
+    expect(qRow).toBe(pRow);
+  });
 });
