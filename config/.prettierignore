@@ -2,6 +2,9 @@ dist/
 node_modules/
 package-lock.json
 
+# gitleaks-action（CI）が生成するレポートファイル
+*.sarif
+
 # 仕様書・README・CLAUDE.md は表組みの整形が崩れるリスクがあるため対象外
 docs/
 README.md
