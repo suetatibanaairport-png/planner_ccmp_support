@@ -29,6 +29,16 @@ describe("validateFile: 致命的エラー", () => {
     if (!r.ok) return;
     expect(r.tasks.map((t) => t.id)).toEqual(["DC001", "DC002"]);
   });
+
+  it("列名に半角スペースが含まれていても正常処理される（実際のPlannerの出力に見られる表記ゆれ）", () => {
+    const csv = "タスク ID,タスク名 ,メモ\nT1,タスクA,メモ\n";
+    const r = validateFile("f.csv", csv);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.tasks).toEqual([
+      expect.objectContaining({ id: "T1", name: "タスクA", description: "メモ" }),
+    ]);
+  });
 });
 
 describe("validateFile: 上限値の境界（ちょうど上限＝合格するはず）", () => {
