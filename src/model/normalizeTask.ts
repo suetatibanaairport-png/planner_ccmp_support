@@ -7,7 +7,7 @@ const COLUMNS = {
   taskId: "タスクID",
   taskName: "タスク名",
   bucketName: "バケット",
-  progress: "状況",
+  progress: "状態",
   assignees: "担当者",
   startDate: "開始日",
   dueDate: "期限",
@@ -17,21 +17,25 @@ const COLUMNS = {
 
 const REQUIRED_COLUMNS = [COLUMNS.taskId, COLUMNS.taskName, COLUMNS.description];
 
-/** 列名比較用に空白（半角・全角・タブ等）をすべて除去する。Plannerの出力は「タスク ID」「タスク名 」のように列名に不定の空白を含むことがあるため。 */
-function stripSpaces(value: string): string {
-  return value.replace(/\s+/g, "");
+/**
+ * 列名比較用に表記ゆれを正規化する。Plannerの出力は「タスク ID」「タスク名 」のように空白
+ * （半角・全角・タブ等）を含んだり、「担当者:」のように末尾にコロン（半角・全角）が付いたり
+ * することがあるため、いずれも除去してから比較する。
+ */
+function normalizeColumnName(value: string): string {
+  return value.replace(/\s+/g, "").replace(/[:：]+$/, "");
 }
 
 export function hasRequiredColumns(header: string[]): boolean {
-  const normalizedHeader = header.map(stripSpaces);
-  return REQUIRED_COLUMNS.every((col) => normalizedHeader.includes(stripSpaces(col)));
+  const normalizedHeader = header.map(normalizeColumnName);
+  return REQUIRED_COLUMNS.every((col) => normalizedHeader.includes(normalizeColumnName(col)));
 }
 
-/** 列名の空白差異を許容して値を取得する（完全一致を優先し、無ければ空白除去後の一致を探す）。 */
+/** 列名の空白・末尾コロンの表記ゆれを許容して値を取得する（完全一致を優先し、無ければ正規化後の一致を探す）。 */
 function getField(record: CsvRecord, columnName: string): string | undefined {
   if (columnName in record) return record[columnName];
-  const target = stripSpaces(columnName);
-  const key = Object.keys(record).find((k) => stripSpaces(k) === target);
+  const target = normalizeColumnName(columnName);
+  const key = Object.keys(record).find((k) => normalizeColumnName(k) === target);
   return key === undefined ? undefined : record[key];
 }
 

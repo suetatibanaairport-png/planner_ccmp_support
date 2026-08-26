@@ -39,6 +39,24 @@ describe("validateFile: 致命的エラー", () => {
       expect.objectContaining({ id: "T1", name: "タスクA", description: "メモ" }),
     ]);
   });
+
+  it("列名の末尾にコロンが含まれていても正常処理される（例：担当者:）", () => {
+    const csv = "タスクID,タスク名,担当者:,メモ\nT1,タスクA,田中 健太;佐藤 美咲,メモ\n";
+    const r = validateFile("f.csv", csv);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.tasks).toEqual([
+      expect.objectContaining({ id: "T1", assignees: ["田中 健太", "佐藤 美咲"] }),
+    ]);
+  });
+
+  it("状態列の値が完了の場合、Task.isCompletedがtrueになる", () => {
+    const csv = "タスクID,タスク名,状態,メモ\nT1,タスクA,完了,メモ\n";
+    const r = validateFile("f.csv", csv);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.tasks).toEqual([expect.objectContaining({ id: "T1", isCompleted: true })]);
+  });
 });
 
 describe("validateFile: 上限値の境界（ちょうど上限＝合格するはず）", () => {
