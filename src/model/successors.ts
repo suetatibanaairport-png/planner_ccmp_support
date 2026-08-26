@@ -1,7 +1,7 @@
 // 機能仕様書 3.3「後続タスクの記法」の抽出処理。
 import { splitAndTrim } from "./splitAndTrim";
 
-const SUCCESSORS_LINE_PATTERN = /^後続タスク:(.*)$/gim;
+const SUCCESSORS_LINE_PATTERN = /^後続タスク[:：](.*)$/gim;
 
 export interface SuccessorsExtractionResult {
   ids: string[];
