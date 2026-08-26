@@ -8,9 +8,10 @@ const NO_HOLIDAYS = new Set<string>();
 const d = (s: string) => parseTaskDate(s)!;
 
 describe("parseTaskDate / parseHolidayDate", () => {
-  it("タスクCSVは YYYY/MM/DD のみ受理する", () => {
+  it("タスクCSVは YYYY/MM/DD・YYYY-MM-DD を受理する（区切り文字の混在は不可）", () => {
     expect(parseTaskDate("2026/01/05")).not.toBeNull();
-    expect(parseTaskDate("2026-01-05")).toBeNull();
+    expect(parseTaskDate("2026-01-05")).not.toBeNull();
+    expect(parseTaskDate("2026/01-05")).toBeNull();
     expect(parseTaskDate("2026/1/5")).toBeNull();
   });
 

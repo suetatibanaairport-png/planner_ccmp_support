@@ -1,5 +1,7 @@
-// 機能仕様書 3.4: タスク CSV の日付は YYYY/MM/DD 形式のみを許容する（他形式は不正 = W307）。
-const TASK_DATE_PATTERN = /^(\d{4})\/(\d{2})\/(\d{2})$/;
+// 機能仕様書 3.4: タスク CSV の日付は YYYY/MM/DD・YYYY-MM-DD の両方を許容する
+// （出力環境によって区切り文字が揺れるため）。区切り文字は前後で統一されている必要がある
+// （\2 で後方参照）。両形式以外は不正（W307）。
+const TASK_DATE_PATTERN = /^(\d{4})([/-])(\d{2})\2(\d{2})$/;
 
 // 機能仕様書 3.7: 休日設定ファイルの日付は YYYY-MM-DD 形式（タスクCSVとは異なる）。
 const HOLIDAY_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -17,13 +19,13 @@ function toUtcDate(year: number, month: number, day: number): Date | null {
   return date;
 }
 
-/** タスク CSV の日付文字列（YYYY/MM/DD）を UTC 日付に変換する。不正な場合は null（W307）。 */
+/** タスク CSV の日付文字列（YYYY/MM/DD または YYYY-MM-DD）を UTC 日付に変換する。不正な場合は null（W307）。 */
 export function parseTaskDate(value: string): Date | null {
   const trimmed = value.trim();
   if (trimmed === "") return null;
   const m = TASK_DATE_PATTERN.exec(trimmed);
   if (!m) return null;
-  return toUtcDate(Number(m[1]), Number(m[2]), Number(m[3]));
+  return toUtcDate(Number(m[1]), Number(m[3]), Number(m[4]));
 }
 
 /** 休日設定ファイルの日付文字列（YYYY-MM-DD）を UTC 日付に変換する。不正な場合は null。 */

@@ -60,7 +60,7 @@ npm run format:check      # prettier --check .
 
 ### 2種類の日付書式（混同注意）
 
-タスクCSVの日付は `YYYY/MM/DD`（`calendar/parseDate.ts` の `parseTaskDate`）、休日CSVは `YYYY-MM-DD`（`parseHolidayDate`）。書式違反はクラッシュではなく警告（W307）— 日付の欠落・不正時は3営業日の仮置き所要日数にフォールバックし（W304/W305/W306）、ジグザグのエッジとして描画される。
+タスクCSVの日付は `YYYY/MM/DD`・`YYYY-MM-DD` の両方を許容（`calendar/parseDate.ts` の `parseTaskDate`、区切り文字の前後混在は不可）、休日CSVは `YYYY-MM-DD` のみ（`parseHolidayDate`）。書式違反はクラッシュではなく警告（W307）— 日付の欠落・不正時は3営業日の仮置き所要日数にフォールバックし（W304/W305/W306）、ジグザグのエッジとして描画される。
 
 ### セキュリティ: DOM書き込みは `security/dom.ts` のみ
 
