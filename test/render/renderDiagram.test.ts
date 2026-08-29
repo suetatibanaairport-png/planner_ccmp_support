@@ -42,9 +42,11 @@ function renderProject(p: Project): SVGSVGElement {
   return renderDiagram(layout, [p], new Map());
 }
 
-/** 日数軸の目盛りラベル（数字のみのtext）を除いた、タスク名ラベルのtext要素一覧。 */
+/** 日数軸の目盛りラベル（数字のみのtext）とプロジェクト名ラベルを除いた、タスク名ラベルのtext要素一覧。 */
 function taskNameLabels(svg: SVGSVGElement): SVGTextElement[] {
-  return [...svg.querySelectorAll("text")].filter((t) => !/^-?\d+$/.test(t.textContent ?? ""));
+  return [...svg.querySelectorAll<SVGTextElement>("text:not(.project-label)")].filter(
+    (t) => !/^-?\d+$/.test(t.textContent ?? ""),
+  );
 }
 
 describe("renderDiagram: タスク名ラベル", () => {
@@ -174,6 +176,51 @@ describe("renderDiagram: ダミー矢線の折れ線形状", () => {
     expect(y1).toBe(y0); // 折れ点までは先行イベント（N0）と同じ行の高さ
     expect(y2).not.toBe(y0); // 合流イベント（N1）の行には末尾でのみ切り替わる
     expect(x1).toBeLessThan(points[2]![0]!); // 折れ点は終点の手前
+  });
+});
+
+describe("renderDiagram: プロジェクト名ラベル（機能仕様書 3.5.4）", () => {
+  const withOneArrow = (over: Partial<Project> & { key: string }): Project => {
+    const events: Event[] = [
+      { id: "N0", number: 0 },
+      { id: "N1", number: 1 },
+    ];
+    const arrow: Arrow = {
+      from: "N0",
+      to: "N1",
+      kind: "activity",
+      taskId: "T1",
+      durationBusinessDays: 3,
+      placeholder: false,
+    };
+    return project({
+      tasks: [task("T1", "作業")],
+      events,
+      arrows: [arrow],
+      eventTimings: [
+        { eventId: "N0", es: 0, ls: 0 },
+        { eventId: "N1", es: 3, ls: 3 },
+      ],
+      arrowTimings: [{ arrow, es: 0, ef: 3, ls: 0, lf: 3, totalFloat: 0, isCritical: true }],
+      ...over,
+    });
+  };
+
+  it("非孤立プロジェクトは先頭ノードより上にファイル名の text.project-label を描画する", () => {
+    const svg = renderProject(withOneArrow({ key: "planA" }));
+    const label = svg.querySelector<SVGTextElement>("text.project-label");
+    expect(label).not.toBeNull();
+    expect(label!.textContent).toBe("planA.csv");
+
+    const minCy = Math.min(
+      ...[...svg.querySelectorAll("circle")].map((c) => Number(c.getAttribute("cy"))),
+    );
+    expect(Number(label!.getAttribute("y"))).toBeLessThan(minCy);
+  });
+
+  it("孤立タスクの独立プロジェクトにはプロジェクト名を描画しない", () => {
+    const svg = renderProject(withOneArrow({ key: "planA", isolated: true }));
+    expect(svg.querySelector("text.project-label")).toBeNull();
   });
 });
 

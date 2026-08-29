@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
+  buildDataUri,
   createHtmlElement,
   createSvgElement,
   setSafeAttribute,
@@ -66,5 +67,14 @@ describe("setSwatchColor: 背景色のみを設定する", () => {
     const el = createHtmlElement("span");
     setSwatchColor(el, "rgb(1, 2, 3)");
     expect(el.style.backgroundColor).toBe("rgb(1, 2, 3)");
+  });
+});
+
+describe("buildDataUri: ダウンロード用の data URI（機能仕様書 4.3）", () => {
+  it("mimeType と charset=utf-8 を含み、本文は encodeURIComponent 済み", () => {
+    const uri = buildDataUri("text/csv", "タスク名,後続タスク\r\nタスクA,後続タスク：A002,A003");
+    expect(uri.startsWith("data:text/csv;charset=utf-8,")).toBe(true);
+    expect(uri).not.toContain("\n");
+    expect(uri).toContain(encodeURIComponent("後続タスク：A002,A003"));
   });
 });

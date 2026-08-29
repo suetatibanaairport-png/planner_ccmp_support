@@ -1,5 +1,5 @@
 // 機能仕様書 1.4「画面構成」の組み立て：ヘッダー・メイン領域（図＋ズーム／パン＋パネル）・
-// フッター（休日設定ファイル／エラー表示／凡例ボタン、著作権表示）。
+// フッター（担当者凡例／依存関係編集／エラー表示／休日設定ファイルの各ボタン、著作権表示）。
 import { parseHolidayFile } from "../calendar/holidayFile";
 import { layoutWorkspace } from "../layout/layoutWorkspace";
 import { DEFAULT_DIAGRAM_CONFIG, renderDiagram } from "../render/renderDiagram";
@@ -9,12 +9,22 @@ import {
   appendChildren,
   clearChildren,
   createHtmlElement,
+  downloadTextFile,
   setSafeAttribute,
 } from "../security/dom";
-import type { FatalErrorInfo, WarningInfo } from "../types";
+import { EditSession } from "../edit/EditSession";
+import { successorsCsvText } from "../edit/editEdges";
+import type { FatalErrorInfo, TaskId, WarningInfo } from "../types";
 import { selectFilesWithinLimits } from "../validate/selectFilesWithinLimits";
 import { Workspace } from "../workspace/Workspace";
 import { computeFitScale } from "./fitScale";
+import { renderEditPanel, type EditPanelHandlers } from "./renderEditPanel";
+
+const ADD_EDGE_ERROR: Record<"self" | "duplicate" | "cycle", string> = {
+  self: "自分自身を先行・後続タスクに指定することはできません。",
+  duplicate: "その後続タスクは既に登録されています。",
+  cycle: "この追加を行うと依存関係が循環します。追加は行いません。",
+};
 
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 5;
@@ -39,9 +49,16 @@ export class App {
   private errorPanel!: HTMLDivElement;
   private warningPanel!: HTMLDivElement;
   private legendPanel!: HTMLDivElement;
+  private editPanel!: HTMLDivElement;
   private errorBadge!: HTMLElement;
   private taskFileInput!: HTMLInputElement;
   private holidayFileInput!: HTMLInputElement;
+
+  // 機能仕様書 4.3: 依存関係の手動編集。編集状態はプロジェクト（ファイル）ごとに独立して保持する。
+  private editSessions = new Map<string, EditSession>();
+  private selectedEditFile: string | null = null;
+  private editSelecting: { originTaskId: TaskId; kind: "pred" | "succ" } | null = null;
+  private layoutShiftNoticeShown = false;
 
   constructor(root: HTMLElement, defaultHolidayCsvText: string) {
     const defaultHolidays = parseHolidayFile(defaultHolidayCsvText);
@@ -107,6 +124,7 @@ export class App {
       hidden: "hidden",
     });
     this.legendPanel = createHtmlElement("div", { class: "panel legend-panel", hidden: "hidden" });
+    this.editPanel = createHtmlElement("div", { class: "panel edit-panel", hidden: "hidden" });
 
     appendChildren(main, [
       this.diagramViewport,
@@ -114,6 +132,7 @@ export class App {
       this.errorPanel,
       this.warningPanel,
       this.legendPanel,
+      this.editPanel,
     ]);
     return main;
   }
@@ -137,16 +156,24 @@ export class App {
     const errorButton = createHtmlElement("button", { type: "button" }, "エラー表示");
     errorButton.addEventListener("click", () => this.togglePanel(this.errorPanel));
 
-    const legendButton = createHtmlElement("button", { type: "button" }, "凡例");
+    const legendButton = createHtmlElement("button", { type: "button" }, "担当者凡例");
     legendButton.addEventListener("click", () => this.togglePanel(this.legendPanel));
 
+    const editButton = createHtmlElement("button", { type: "button" }, "依存関係編集");
+    editButton.addEventListener("click", () => {
+      this.togglePanel(this.editPanel);
+      this.rerenderEditPanel();
+    });
+
+    // フッター左のボタン並び（UI・UX仕様書 1.4）: 担当者凡例・依存関係編集・エラー表示・休日設定ファイル。
     const footerLeft = createHtmlElement("div", { class: "footer-left" });
     appendChildren(footerLeft, [
-      holidayButton,
-      this.holidayFileInput,
+      legendButton,
+      editButton,
       errorButton,
       this.errorBadge,
-      legendButton,
+      holidayButton,
+      this.holidayFileInput,
     ]);
 
     const footerRight = createHtmlElement(
@@ -162,7 +189,7 @@ export class App {
 
   private togglePanel(panel: HTMLElement): void {
     const isHidden = panel.hasAttribute("hidden");
-    for (const p of [this.errorPanel, this.warningPanel, this.legendPanel]) {
+    for (const p of [this.errorPanel, this.warningPanel, this.legendPanel, this.editPanel]) {
       setSafeAttribute(p, "hidden", "hidden");
     }
     if (isHidden) {
@@ -175,6 +202,8 @@ export class App {
    * FileReader による内容読み込みより前に、E402（ファイル数上限）・E404（サイズ上限）を判定する。
    */
   private async handleFilesSelected(fileList: FileList): Promise<void> {
+    if (!this.confirmDiscardEditsIfNeeded()) return;
+
     const files = [...fileList].sort((a, b) => a.name.localeCompare(b.name, "en"));
     const existingFileCount = this.workspace.getLoadedFileCount();
 
@@ -201,6 +230,8 @@ export class App {
   }
 
   private async handleHolidayFileSelected(file: File): Promise<void> {
+    if (!this.confirmDiscardEditsIfNeeded()) return;
+
     const text = await readFileAsText(file);
     const parsed = parseHolidayFile(text);
 
@@ -231,6 +262,10 @@ export class App {
     this.workspace.reset();
     this.allErrors = [];
     this.allWarnings = [];
+    this.editSessions.clear();
+    this.selectedEditFile = null;
+    this.editSelecting = null;
+    this.layoutShiftNoticeShown = false;
     this.rerender();
   }
 
@@ -248,6 +283,153 @@ export class App {
     renderWarningList(this.warningPanel, this.allWarnings);
     renderLegend(this.legendPanel, palette);
     updateErrorBadge(this.errorBadge, this.allErrors.length);
+    this.rerenderEditPanel();
+  }
+
+  // ── 機能仕様書 4.3: 依存関係の手動編集 ───────────────────────────────
+
+  private confirmDiscardEditsIfNeeded(): boolean {
+    let hasEdits = false;
+    for (const session of this.editSessions.values()) {
+      if (session.hasChanges()) {
+        hasEdits = true;
+        break;
+      }
+    }
+    if (!hasEdits) return true;
+
+    const ok = window.confirm(
+      "未反映の手動編集があります。続行すると手動編集の内容は破棄されます。よろしいですか？",
+    );
+    if (ok) {
+      this.editSessions.clear();
+      this.selectedEditFile = null;
+      this.editSelecting = null;
+    }
+    return ok;
+  }
+
+  private sessionFor(fileName: string): EditSession {
+    let session = this.editSessions.get(fileName);
+    if (!session) {
+      const model = this.workspace.getModel(fileName);
+      session = new EditSession(model?.edges ?? []);
+      this.editSessions.set(fileName, session);
+    }
+    return session;
+  }
+
+  private editHandlers(): EditPanelHandlers {
+    return {
+      onSelectFile: (name) => {
+        this.selectedEditFile = name;
+        this.editSelecting = null;
+        this.rerenderEditPanel();
+      },
+      onStartAdd: (originTaskId, kind) => {
+        this.editSelecting = { originTaskId, kind };
+        this.rerenderEditPanel();
+      },
+      onCancelAdd: () => {
+        this.editSelecting = null;
+        this.rerenderEditPanel();
+      },
+      onPickCounterpart: (otherTaskId) => {
+        const selecting = this.editSelecting;
+        const file = this.selectedEditFile;
+        this.editSelecting = null;
+        if (!selecting || file === null) {
+          this.rerenderEditPanel();
+          return;
+        }
+        const [from, to] =
+          selecting.kind === "pred"
+            ? [otherTaskId, selecting.originTaskId]
+            : [selecting.originTaskId, otherTaskId];
+        const result = this.sessionFor(file).add(from, to);
+        if (!result.ok) window.alert(ADD_EDGE_ERROR[result.reason]);
+        this.rerenderEditPanel();
+      },
+      onDeleteEdge: (from, to) => {
+        if (this.selectedEditFile === null) return;
+        this.sessionFor(this.selectedEditFile).remove(from, to);
+        this.rerenderEditPanel();
+      },
+      onUndo: () => {
+        if (this.selectedEditFile === null) return;
+        this.sessionFor(this.selectedEditFile).undo();
+        this.rerenderEditPanel();
+      },
+      onRedo: () => {
+        if (this.selectedEditFile === null) return;
+        this.sessionFor(this.selectedEditFile).redo();
+        this.rerenderEditPanel();
+      },
+      onUpdateGraph: () => {
+        const file = this.selectedEditFile;
+        if (file === null) return;
+        if (!this.layoutShiftNoticeShown) {
+          window.alert("「グラフを更新」すると図のレイアウトが大きく変わる場合があります。");
+          this.layoutShiftNoticeShown = true;
+        }
+        const warnings = this.workspace.applyManualEdits(file, this.sessionFor(file).edges);
+        this.allWarnings = this.allWarnings.filter((w) => w.fileName !== file).concat(warnings);
+        this.rerender();
+      },
+      onExport: () => {
+        const file = this.selectedEditFile;
+        if (file === null) return;
+        const model = this.workspace.getModel(file);
+        if (!model) return;
+        const session = this.sessionFor(file);
+        const text = successorsCsvText(model.tasks, session.changedIds(), session.edges);
+        downloadTextFile("後続タスク変更.csv", "text/csv", text);
+      },
+    };
+  }
+
+  private rerenderEditPanel(): void {
+    if (this.editPanel.hasAttribute("hidden")) return;
+
+    const fileNames = this.workspace.getLoadedFileNames();
+    if (this.selectedEditFile === null || !fileNames.includes(this.selectedEditFile)) {
+      this.selectedEditFile = fileNames[0] ?? null;
+      this.editSelecting = null;
+    }
+
+    const handlers = this.editHandlers();
+    const file = this.selectedEditFile;
+    const model = file === null ? undefined : this.workspace.getModel(file);
+
+    if (file === null || !model) {
+      renderEditPanel(this.editPanel, {
+        fileNames,
+        selectedFileName: null,
+        tasks: [],
+        edges: [],
+        changedIds: new Set(),
+        canUndo: false,
+        canRedo: false,
+        hasChanges: false,
+        selecting: null,
+        handlers,
+      });
+      return;
+    }
+
+    const session = this.sessionFor(file);
+    renderEditPanel(this.editPanel, {
+      fileNames,
+      selectedFileName: file,
+      tasks: model.tasks,
+      edges: session.edges,
+      changedIds: session.changedIds(),
+      canUndo: session.canUndo(),
+      canRedo: session.canRedo(),
+      hasChanges: session.hasChanges(),
+      selecting: this.editSelecting,
+      handlers,
+    });
   }
 
   /** 読み込み直後に図全体が収まるよう、拡大率をビューポートに合わせ直す。 */

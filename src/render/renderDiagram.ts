@@ -31,6 +31,8 @@ export const DEFAULT_DIAGRAM_CONFIG: DiagramConfig = {
 
 const DUMMY_COLOR = "#9aa0a6"; // 無彩色（4.2.4「ダミー」）
 const BOUNDARY_COLOR = "#c4c7cc"; // プロジェクト境界のグレーの水平線（4.2.4）
+const PROJECT_LABEL_FONT_SIZE = 11; // AOA左上のプロジェクト名ラベル（機能仕様書 3.5.4 / UI・UX仕様書 4.2.4）
+const PROJECT_LABEL_COLOR = "#4b5563";
 const NODE_FILL = "#ffffff";
 const NODE_STROKE = "#4b5563";
 const LABEL_OFFSET_Y = 4; // タスク名ラベルと矢線の間の余白（px）
@@ -131,6 +133,27 @@ export function renderDiagram(
           stroke: BOUNDARY_COLOR,
           "stroke-width": 1,
         }),
+      );
+    }
+
+    // 機能仕様書 3.5.4: 各プロジェクトの先頭タスクの上部・左詰めにプロジェクト名（ファイル名）を表示する。
+    // 孤立タスクの独立プロジェクトには表示しない。先頭行の中心が +rowHeight/2 にあり上部に余白があるため、
+    // 追加の行確保はしない。
+    if (!pl.isolated) {
+      const bandTop = config.axisHeight + config.padding + pl.topRow * config.rowHeight;
+      svg.appendChild(
+        createSvgElement(
+          "text",
+          {
+            class: "project-label",
+            x: config.padding,
+            y: bandTop + PROJECT_LABEL_FONT_SIZE + 2,
+            "font-size": PROJECT_LABEL_FONT_SIZE,
+            "font-weight": "600",
+            fill: PROJECT_LABEL_COLOR,
+          },
+          pl.fileName,
+        ),
       );
     }
 
