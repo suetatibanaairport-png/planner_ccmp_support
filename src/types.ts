@@ -22,6 +22,13 @@ export interface Edge {
   to: TaskId; // 後続タスク
 }
 
+/** 機能仕様書 4.3 / 詳細設計書 10 章: 依存関係の手動編集の1操作。 */
+export interface EditOp {
+  kind: "add" | "remove";
+  from: TaskId;
+  to: TaskId;
+}
+
 /** ステージ7（4.1.1）で算出した所要日数。仮置きの場合は placeholder = true。 */
 export interface Duration {
   taskId: TaskId;

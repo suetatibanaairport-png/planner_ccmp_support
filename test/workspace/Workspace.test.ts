@@ -58,3 +58,62 @@ describe("Workspace.addFiles", () => {
     expect([...forward.addedProjectKeys].sort()).toEqual([...reversed.addedProjectKeys].sort());
   });
 });
+
+describe("Workspace 手動編集（機能仕様書 4.3）", () => {
+  const load = (name: string, fixture: string): Workspace => {
+    const ws = new Workspace(new Set());
+    ws.addFiles([{ name, text: read(fixture) }]);
+    return ws;
+  };
+
+  it("getModel は前半出力（タスクと依存辺）を返す", () => {
+    const ws = load("serial.csv", "minimal/serial_ja.csv");
+    const model = ws.getModel("serial.csv")!;
+    expect(model.tasks.map((t) => t.id)).toEqual(["A001", "A002", "A003"]);
+    expect(model.edges).toEqual([
+      { from: "A001", to: "A002" },
+      { from: "A002", to: "A003" },
+    ]);
+    expect(ws.getModel("missing.csv")).toBeUndefined();
+  });
+
+  it("getLoadedFileNames はファイル名昇順", () => {
+    const ws = new Workspace(new Set());
+    ws.addFiles([
+      { name: "b.csv", text: read("minimal/serial_ja.csv") },
+      { name: "a.csv", text: read("minimal/branch_merge_ja.csv") },
+    ]);
+    expect(ws.getLoadedFileNames()).toEqual(["a.csv", "b.csv"]);
+  });
+
+  it("applyManualEdits で辺を削ると arrowTimings が変化し、切り離されたタスクが孤立プロジェクト化する", () => {
+    const ws = load("serial.csv", "minimal/serial_ja.csv");
+    const before = ws.getProjects().find((p) => p.key === "serial")!;
+    const beforeActivities = before.arrowTimings.filter((t) => t.arrow.kind === "activity").length;
+
+    ws.applyManualEdits("serial.csv", [{ from: "A001", to: "A002" }]);
+
+    const after = ws.getProjects().find((p) => p.key === "serial")!;
+    const afterActivities = after.arrowTimings.filter((t) => t.arrow.kind === "activity").length;
+    expect(afterActivities).toBeLessThan(beforeActivities);
+    expect(ws.getProjects().some((p) => p.key === "serial#isolated")).toBe(true);
+  });
+
+  it("孤立タスクに辺を追加すると #isolated プロジェクトが消える", () => {
+    const ws = load("iso.csv", "minimal/isolated_task_ja.csv");
+    expect(ws.getProjects().some((p) => p.key === "iso#isolated")).toBe(true);
+
+    const edges = [...ws.getModel("iso.csv")!.edges, { from: "I002", to: "I003" }];
+    ws.applyManualEdits("iso.csv", edges);
+
+    expect(ws.getProjects().some((p) => p.key === "iso#isolated")).toBe(false);
+  });
+
+  it("applyManualEdits を繰り返しても警告が累積しない", () => {
+    const ws = load("warn.csv", "errors/warnings_ja.csv");
+    const model = ws.getModel("warn.csv")!;
+    const first = ws.applyManualEdits("warn.csv", model.edges);
+    const second = ws.applyManualEdits("warn.csv", model.edges);
+    expect(second.length).toBe(first.length);
+  });
+});

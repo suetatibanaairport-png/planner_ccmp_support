@@ -88,3 +88,24 @@ export function clearChildren(parent: Element): void {
 export function setSwatchColor(el: HTMLElement, color: string): void {
   el.style.backgroundColor = color;
 }
+
+/** アプリが生成したテキストの data: URI を組み立てる（機能仕様書 4.3 の CSV ダウンロード用）。 */
+export function buildDataUri(mimeType: string, text: string): string {
+  return `data:${mimeType};charset=utf-8,${encodeURIComponent(text)}`;
+}
+
+/**
+ * アプリが生成したテキストを名前付きファイルとしてダウンロードさせる（機能仕様書 4.3）。
+ * href/download の属性設定はこのモジュール（DOM書き込みの唯一の窓口）でのみ行う。値はいずれも
+ * アプリ生成であり、CSV由来の文字列を href/download に渡すことはない。CSP 上、<a download> の
+ * ダウンロードはフェッチ制御（connect-src / form-action）の対象外（セキュリティ仕様書 6.3）。
+ */
+export function downloadTextFile(fileName: string, mimeType: string, text: string): void {
+  const anchor = document.createElement("a");
+  anchor.setAttribute("href", buildDataUri(mimeType, text));
+  anchor.setAttribute("download", fileName);
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+}

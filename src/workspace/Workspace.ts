@@ -4,7 +4,13 @@ import type { Edge, FatalErrorInfo, Project, Task, TaskId, WarningInfo } from ".
 import { exceedsTotalTaskLimit } from "../validate/exceedsTotalTaskLimit";
 import { LIMITS } from "../validate/limits";
 import { generateColorPalette } from "./colorPalette";
-import { processFile, type ProcessedProject } from "./pipeline";
+import {
+  computeProject,
+  parseFileToModel,
+  processFile,
+  type FileModel,
+  type ProcessedProject,
+} from "./pipeline";
 import {
   detectResourceConflicts,
   type ProjectArrowTimings,
@@ -23,6 +29,7 @@ const ISOLATED_KEY_SUFFIX = "#isolated"; // 内部識別用。画面には表示
 export class Workspace {
   private projects = new Map<string, Project>();
   private rawTextByFileName = new Map<string, string>(); // 休日設定ファイル変更時の再計算用
+  private modelByFileName = new Map<string, FileModel>(); // 手動編集（4.3）の基準となる前半出力
   private taskIdOwner = new Map<TaskId, string>(); // taskId -> fileName（E206判定用）
   private taskIdsByFileName = new Map<string, TaskId[]>(); // removeFile時の逆引き用
   private taskCountByFileName = new Map<string, number>(); // E401累計判定用（CSV上の生タスク件数）
@@ -39,6 +46,43 @@ export class Workspace {
   /** ステージ[0]（E402判定用、呼び出し元 ui/App.ts）: 読み込み済みファイル数。 */
   getLoadedFileCount(): number {
     return this.rawTextByFileName.size;
+  }
+
+  /** 4.3: 依存関係の手動編集ペインのリストボックス用。読み込み順ではなくファイル名昇順で返す。 */
+  getLoadedFileNames(): string[] {
+    return [...this.rawTextByFileName.keys()].sort((a, b) => a.localeCompare(b, "en"));
+  }
+
+  /** 4.3: 手動編集の基準となる前半出力（タスク・依存辺）の複製を返す。 */
+  getModel(fileName: string): { tasks: Task[]; edges: Edge[] } | undefined {
+    const model = this.modelByFileName.get(fileName);
+    if (!model) return undefined;
+    return {
+      tasks: model.tasks.map((t) => ({ ...t })),
+      edges: model.edges.map((e) => ({ ...e })),
+    };
+  }
+
+  /**
+   * 4.3「グラフを更新」: 編集後の依存辺で当該プロジェクトのステージ[6]以降を再実行する。
+   * 当該ファイルのプロジェクトキー（ネットワーク部・孤立部）を差し替え、共通時間軸を再計算する。
+   * 戻り値は当該ファイル由来の全警告（呼び出し元で既存の同ファイル警告と差し替える）。
+   */
+  applyManualEdits(fileName: string, edges: readonly Edge[]): WarningInfo[] {
+    const model = this.modelByFileName.get(fileName);
+    if (!model) return [];
+
+    const computed = computeProject(fileName, model.tasks, edges, this.holidayKeys, model.warnings);
+    if (!computed.ok) return []; // 循環はUI側で排除済みのため通常発生しない
+
+    const key = this.projectKeyFor(fileName);
+    this.projects.delete(key);
+    this.projects.delete(`${key}${ISOLATED_KEY_SUFFIX}`);
+
+    const addedKeys = this.registerProject(fileName, computed.project);
+    this.recomputeTimeline();
+
+    return [...computed.project.warnings, ...this.collectW315Warnings(addedKeys)];
   }
 
   /**
@@ -68,6 +112,7 @@ export class Workspace {
   reset(): void {
     this.projects.clear();
     this.rawTextByFileName.clear();
+    this.modelByFileName.clear();
     this.taskIdOwner.clear();
     this.taskIdsByFileName.clear();
     this.taskCountByFileName.clear();
@@ -75,6 +120,7 @@ export class Workspace {
 
   removeFile(fileName: string): void {
     this.rawTextByFileName.delete(fileName);
+    this.modelByFileName.delete(fileName);
     this.taskCountByFileName.delete(fileName);
     for (const id of this.taskIdsByFileName.get(fileName) ?? []) {
       this.taskIdOwner.delete(id);
@@ -127,14 +173,26 @@ export class Workspace {
         continue;
       }
 
-      const result = processFile(file.name, file.text, this.holidayKeys);
-      if (!result.ok) {
-        rejectedFiles.push(result.error);
+      const model = parseFileToModel(file.name, file.text);
+      if (!model.ok) {
+        rejectedFiles.push(model.error);
         continue;
       }
-      const { project } = result;
 
-      const collidingId = this.findCollidingTaskId(project.tasks.map((t) => t.id));
+      const computed = computeProject(
+        file.name,
+        model.tasks,
+        model.edges,
+        this.holidayKeys,
+        model.warnings,
+      );
+      if (!computed.ok) {
+        rejectedFiles.push(computed.error); // E203（循環依存）
+        continue;
+      }
+      const { project } = computed;
+
+      const collidingId = this.findCollidingTaskId(model.tasks.map((t) => t.id));
       if (collidingId !== null) {
         rejectedFiles.push({
           code: "E206",
@@ -144,7 +202,7 @@ export class Workspace {
         continue;
       }
 
-      const taskCountInFile = project.tasks.length;
+      const taskCountInFile = model.tasks.length;
       if (exceedsTotalTaskLimit(cumulativeTaskCount, taskCountInFile)) {
         rejectedFiles.push({
           code: "E401",
@@ -155,12 +213,17 @@ export class Workspace {
       }
 
       this.rawTextByFileName.set(file.name, file.text);
+      this.modelByFileName.set(file.name, {
+        tasks: model.tasks,
+        edges: model.edges,
+        warnings: model.warnings,
+      });
       this.taskCountByFileName.set(file.name, taskCountInFile);
       this.taskIdsByFileName.set(
         file.name,
-        project.tasks.map((t) => t.id),
+        model.tasks.map((t) => t.id),
       );
-      for (const t of project.tasks) this.taskIdOwner.set(t.id, file.name);
+      for (const t of model.tasks) this.taskIdOwner.set(t.id, file.name);
       cumulativeTaskCount += taskCountInFile;
       warnings.push(...project.warnings);
 

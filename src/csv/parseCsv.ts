@@ -9,6 +9,12 @@ export function parseCsv(text: string): string[][] {
   return Papa.parse<string[]>(text, { skipEmptyLines: true }).data;
 }
 
+/** 行 × 列の文字列配列を CSV テキストに変換する（機能仕様書 4.3「変更内容を出力」）。
+ *  カンマ・改行・引用符を含むフィールドのダブルクォート囲みは PapaParse が標準で処理する。 */
+export function unparseCsv(rows: readonly (readonly string[])[]): string {
+  return Papa.unparse(rows as string[][]);
+}
+
 export interface CsvRecord {
   [column: string]: string;
 }

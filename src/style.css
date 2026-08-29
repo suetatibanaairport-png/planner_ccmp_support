@@ -187,3 +187,123 @@ button:hover {
   border-radius: 2px;
   flex: 0 0 auto;
 }
+
+/* 機能仕様書 4.3 / UI・UX仕様書 4.3: 依存関係の手動編集ペイン */
+.edit-panel {
+  width: min(1100px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: 60vh;
+}
+
+.edit-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.edit-project-select {
+  font: inherit;
+  padding: 3px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  max-width: 100%;
+}
+
+.edit-empty {
+  color: var(--muted-color);
+  font-size: 0.9em;
+}
+
+.edit-table-wrap {
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 42vh;
+}
+
+.edit-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+
+.edit-table th,
+.edit-table td {
+  border: 1px solid var(--border-color);
+  padding: 3px 6px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.edit-table th:nth-child(2),
+.edit-table td:nth-child(2) {
+  width: 34%;
+}
+
+.edit-table th {
+  position: sticky;
+  top: 0;
+  background: #f2f3f5;
+}
+
+.edit-col-mid {
+  white-space: normal;
+}
+
+.edit-changed {
+  color: #8b0000;
+}
+
+.edit-selectable {
+  cursor: pointer;
+}
+
+.edit-selectable:hover {
+  background: #eef3ff;
+}
+
+.edit-disabled {
+  pointer-events: none;
+  opacity: 0.5;
+  background: #e5e7eb;
+}
+
+.edit-chip {
+  display: inline-block;
+  margin: 1px 3px 1px 0;
+  padding: 0 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+  cursor: context-menu;
+}
+
+.edit-cancel-row td {
+  background: #fff7e6;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 10;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  padding: 2px;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 2px;
+  padding: 6px 12px;
+  background: #fff;
+}
+
+.context-menu button:hover {
+  background: #eef3ff;
+}

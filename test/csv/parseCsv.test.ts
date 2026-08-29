@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCsv, toRecords } from "../../src/csv/parseCsv";
+import { parseCsv, toRecords, unparseCsv } from "../../src/csv/parseCsv";
 
 describe("parseCsv", () => {
   it("BOM を除去する", () => {
@@ -91,5 +91,28 @@ describe("toRecords", () => {
       ["1", "2"],
     ]);
     expect(records).toEqual([{ a: "2" }]);
+  });
+});
+
+describe("unparseCsv（機能仕様書 4.3 変更内容の出力）", () => {
+  it("2 列の行を CSV テキストにする", () => {
+    const text = unparseCsv([
+      ["タスク名", "後続タスク"],
+      ["タスクA", "後続タスク：A002"],
+    ]);
+    expect(text).toBe("タスク名,後続タスク\r\nタスクA,後続タスク：A002");
+  });
+
+  it("カンマを含むフィールドはダブルクォートで囲む", () => {
+    const text = unparseCsv([["タスクA", "後続タスク：A002,A003"]]);
+    expect(text).toBe('タスクA,"後続タスク：A002,A003"');
+  });
+
+  it("parseCsv で往復できる", () => {
+    const rows = [
+      ["タスク名", "後続タスク"],
+      ["タスクA", "後続タスク：A002,A003"],
+    ];
+    expect(parseCsv(unparseCsv(rows))).toEqual(rows);
   });
 });
