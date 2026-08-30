@@ -4,9 +4,11 @@ import { createSvgElement } from "../security/dom";
 import type { Project } from "../types";
 import { colorFor } from "../workspace/colorPalette";
 import type { ProjectLayout, WorkspaceLayout } from "../layout/layoutWorkspace";
+import { buildCalendarAxis } from "./calendarAxis";
 
 export interface DiagramConfig {
   pixelsPerDay: number;
+  pixelsPerCalendarDay: number; // カレンダー軸モードでの1暦日あたりの幅（UI・UX仕様書 4.2.4）
   rowHeight: number;
   nodeRadius: number;
   mergeBufferRadius: number;
@@ -19,6 +21,7 @@ export interface DiagramConfig {
 
 export const DEFAULT_DIAGRAM_CONFIG: DiagramConfig = {
   pixelsPerDay: 24,
+  pixelsPerCalendarDay: 18,
   rowHeight: 84,
   nodeRadius: 6,
   mergeBufferRadius: 11,
@@ -28,6 +31,22 @@ export const DEFAULT_DIAGRAM_CONFIG: DiagramConfig = {
   labelFontSize: 10,
   axisHeight: 28,
 };
+
+/** カレンダー軸モードの入力（共通時間軸の原点日付と非営業日カレンダー）。 */
+export interface CalendarAxisInput {
+  originDate: Date;
+  holidayKeys: ReadonlySet<string>;
+}
+
+/**
+ * 描画結果。`diagram` は図本体（ノード・矢線・縦グリッド線・網掛け）、`axis` は横軸の目盛り行
+ * （日付／営業日ラベル）を別 SVG に分けたもの。ui/ 側で `axis` をビューポート上端に固定し、
+ * 横スクロール・ズームにのみ追従させる（UI・UX仕様書 4.2.4）。両 SVG は同じ `width`。
+ */
+export interface RenderedDiagram {
+  diagram: SVGSVGElement;
+  axis: SVGSVGElement;
+}
 
 const DUMMY_COLOR = "#9aa0a6"; // 無彩色（4.2.4「ダミー」）
 const BOUNDARY_COLOR = "#c4c7cc"; // プロジェクト境界のグレーの水平線（4.2.4）
@@ -39,14 +58,16 @@ const LABEL_OFFSET_Y = 4; // タスク名ラベルと矢線の間の余白（px�
 const GRID_COLOR = "#eef0f2"; // 背景の縦グリッド（営業日の目盛り）
 const AXIS_TEXT_COLOR = "#6b7280";
 const AXIS_LINE_COLOR = "#c4c7cc";
+const NON_BUSINESS_BAND_COLOR = "#f5f6f7"; // カレンダー軸モードで土日祝の隙間に敷く薄い網掛け
 
-/** 読み込み済み全プロジェクトを1つのSVGにレンダリングする（4.2.4）。 */
+/** 読み込み済み全プロジェクトを図本体 SVG と横軸 SVG に分けてレンダリングする（4.2.4）。 */
 export function renderDiagram(
   workspace: WorkspaceLayout,
   projects: readonly Project[],
   colorPalette: ReadonlyMap<string, string>,
   config: DiagramConfig = DEFAULT_DIAGRAM_CONFIG,
-): SVGSVGElement {
+  calendarAxisInput?: CalendarAxisInput,
+): RenderedDiagram {
   const projectByKey = new Map(projects.map((p) => [p.key, p]));
 
   let minX = Infinity;
@@ -62,8 +83,23 @@ export function renderDiagram(
     maxX = 0;
   }
 
+  const firstDay = Math.floor(minX);
+  const lastDay = Math.ceil(maxX);
+
+  // カレンダー軸モード: グローバル営業日番号を実カレンダー日インデックスへ写像する（土日祝は隙間になる）。
+  const calendarAxis = calendarAxisInput
+    ? buildCalendarAxis(
+        firstDay,
+        lastDay,
+        calendarAxisInput.originDate,
+        calendarAxisInput.holidayKeys,
+      )
+    : null;
+  const unitWidth = calendarAxis ? config.pixelsPerCalendarDay : config.pixelsPerDay;
+  const axisSpan = calendarAxis ? calendarAxis.span : lastDay - firstDay;
+
   const totalRows = workspace.projects.reduce((sum, pl) => sum + pl.rowCount, 0);
-  const width = (maxX - minX) * config.pixelsPerDay + config.padding * 2 + config.nodeRadius * 2;
+  const width = axisSpan * unitWidth + config.padding * 2 + config.nodeRadius * 2;
   const height = Math.max(totalRows, 1) * config.rowHeight + config.padding * 2 + config.axisHeight;
 
   const svg = createSvgElement("svg", {
@@ -71,18 +107,30 @@ export function renderDiagram(
     height,
     viewBox: `0 0 ${width} ${height}`,
   });
+  // 横軸の目盛り行は別 SVG に分け、ui/ 側でビューポート上端に固定する（UI・UX仕様書 4.2.4）。
+  const axis = createSvgElement("svg", {
+    width,
+    height: config.axisHeight,
+    viewBox: `0 0 ${width} ${config.axisHeight}`,
+  });
+  // 本体をスクロールしても目盛り行が透けないように不透明な背景を敷く。
+  axis.appendChild(
+    createSvgElement("rect", { x: 0, y: 0, width, height: config.axisHeight, fill: NODE_FILL }),
+  );
 
-  const toPixelX = (x: number): number => config.padding + (x - minX) * config.pixelsPerDay;
+  const toPixelX = (x: number): number =>
+    config.padding + (calendarAxis ? calendarAxis.calendarDayOf(x) : x - minX) * unitWidth;
   const toPixelY = (pl: ProjectLayout, row: number): number =>
     config.axisHeight +
     config.padding +
     (pl.topRow + row) * config.rowHeight +
     config.rowHeight / 2;
 
-  const firstDay = Math.floor(minX);
-  const lastDay = Math.ceil(maxX);
-  for (let day = firstDay; day <= lastDay; day++) {
-    const x = toPixelX(day);
+  const nonBusinessRect = (x: number, y: number, w: number, h: number): SVGElement =>
+    createSvgElement("rect", { x, y, width: w, height: h, fill: NON_BUSINESS_BAND_COLOR });
+
+  // 目盛り1本ぶん: 本体には全高の縦グリッド線、軸 SVG には短いティックとラベルを描く。
+  const emitTick = (x: number, label: string | null): void => {
     svg.appendChild(
       createSvgElement("line", {
         x1: x,
@@ -93,26 +141,62 @@ export function renderDiagram(
         "stroke-width": 1,
       }),
     );
-    svg.appendChild(
-      createSvgElement(
-        "text",
-        {
-          x,
-          y: config.axisHeight - 10,
-          "text-anchor": "middle",
-          "font-size": 10,
-          fill: AXIS_TEXT_COLOR,
-        },
-        String(day),
-      ),
+    axis.appendChild(
+      createSvgElement("line", {
+        x1: x,
+        y1: config.axisHeight - 6,
+        x2: x,
+        y2: config.axisHeight,
+        stroke: AXIS_LINE_COLOR,
+        "stroke-width": 1,
+      }),
     );
+    if (label !== null) {
+      axis.appendChild(
+        createSvgElement(
+          "text",
+          {
+            x,
+            y: config.axisHeight - 10,
+            "text-anchor": "middle",
+            "font-size": 10,
+            fill: AXIS_TEXT_COLOR,
+          },
+          label,
+        ),
+      );
+    }
+  };
+
+  if (calendarAxis) {
+    let prev: { businessDay: number; calendarDay: number } | null = null;
+    for (const tick of calendarAxis.ticks) {
+      const x = toPixelX(tick.businessDay);
+      if (prev && tick.calendarDay - prev.calendarDay > 1) {
+        // 直前の営業日と当営業日の間の非営業日カラムを薄く網掛けする（本体は全高、軸は上端ぶん）。
+        const bandX = config.padding + (prev.calendarDay + 1) * unitWidth;
+        const bandW = (tick.calendarDay - prev.calendarDay - 1) * unitWidth;
+        svg.appendChild(
+          nonBusinessRect(bandX, config.axisHeight, bandW, height - config.axisHeight),
+        );
+        axis.appendChild(nonBusinessRect(bandX, 0, bandW, config.axisHeight));
+      }
+      emitTick(x, tick.label);
+      prev = tick;
+    }
+  } else {
+    // 営業日軸: 最終タスクの終了（右端）を 0 とし、開始方向へ残営業日数を加算する（表示のみ）。
+    for (let day = firstDay; day <= lastDay; day++) {
+      emitTick(toPixelX(day), String(lastDay - day));
+    }
   }
-  svg.appendChild(
+
+  axis.appendChild(
     createSvgElement("line", {
       x1: 0,
-      y1: config.axisHeight,
+      y1: config.axisHeight - 1,
       x2: width,
-      y2: config.axisHeight,
+      y2: config.axisHeight - 1,
       stroke: AXIS_LINE_COLOR,
       "stroke-width": 1,
     }),
@@ -225,7 +309,7 @@ export function renderDiagram(
     }
   }
 
-  return svg;
+  return { diagram: svg, axis };
 }
 
 /**
@@ -244,7 +328,7 @@ const DIAGONAL_RUN = 24; // 分岐部の斜め線がX方向に進む長さ（px�
 /**
  * 折れ線で2点を結ぶ（4.2.4「矢線の描画」）。通常の矢線はノード→斜め線→水平線→ノードの順
  * （終点の行に早く合流し、大半を終点側の行で水平に進む）。ダミー矢線（isDummy）は逆に
- * ノード→水平線→斜め線→ノードの順とし、合流イベントの直前まで先行タスクと同じ行を保つ。
+ * ノード→水平線→斜め線→ノードの順とし、合流イベントの直前まで先行タスクと同じ行（レーン）を保つ。
  */
 function elbowPoints(
   x1: number,
