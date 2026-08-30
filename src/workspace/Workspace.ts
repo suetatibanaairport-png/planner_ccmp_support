@@ -34,6 +34,7 @@ export class Workspace {
   private taskIdsByFileName = new Map<string, TaskId[]>(); // removeFile時の逆引き用
   private taskCountByFileName = new Map<string, number>(); // E401累計判定用（CSV上の生タスク件数）
   private holidayKeys: ReadonlySet<string>;
+  private originDate: Date | null = null; // 4.1.5: 共通時間軸の原点（営業日0の実日付）。カレンダー軸表示用。
 
   constructor(initialHolidayKeys: ReadonlySet<string>) {
     this.holidayKeys = initialHolidayKeys;
@@ -41,6 +42,16 @@ export class Workspace {
 
   getProjects(): Project[] {
     return [...this.projects.values()];
+  }
+
+  /** カレンダー軸表示（UI・UX仕様書 4.2.4）用: 共通時間軸の原点日付。有効な基準日が無ければ null。 */
+  getTimeAxisOrigin(): Date | null {
+    return this.originDate;
+  }
+
+  /** カレンダー軸表示用: 現在の非営業日カレンダー（休日設定ファイル由来の日付キー集合）。 */
+  getHolidayKeys(): ReadonlySet<string> {
+    return this.holidayKeys;
   }
 
   /** ステージ[0]（E402判定用、呼び出し元 ui/App.ts）: 読み込み済みファイル数。 */
@@ -116,6 +127,7 @@ export class Workspace {
     this.taskIdOwner.clear();
     this.taskIdsByFileName.clear();
     this.taskCountByFileName.clear();
+    this.originDate = null;
   }
 
   removeFile(fileName: string): void {
@@ -294,6 +306,7 @@ export class Workspace {
       basisDates.set(key, computeBasisDate(p.tasks, p.edges).date);
     }
     const timeline = computeTimeline(basisDates, this.holidayKeys);
+    this.originDate = timeline.originDate;
     for (const [key, p] of this.projects) {
       const offset = timeline.offsetsByProjectKey.get(key) ?? 0;
       const basis = basisDates.get(key) ?? null;

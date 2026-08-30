@@ -29,6 +29,7 @@ const ADD_EDGE_ERROR: Record<"self" | "duplicate" | "cycle", string> = {
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 5;
 const ZOOM_STEP = 1.2;
+const AXIS_LABEL_MIN_GAP_PX = 34; // 営業日軸ラベルを間引く際、画面上で確保する最小間隔
 
 export class App {
   private workspace: Workspace;
@@ -45,6 +46,10 @@ export class App {
   private dragStartTranslateY = 0;
 
   private diagramLayer!: HTMLDivElement;
+  private axisLayer!: HTMLDivElement; // 横軸の目盛り行の固定クリップ枠（ビューポート上端に固定）。
+  private axisInner!: HTMLDivElement; // 軸SVGを載せる変形専用の内側要素（横スクロール・ズームに追従）。
+  private axisLabelPitchPx = 0; // 軸ラベルのSVG座標上のピッチ（営業日=pixelsPerDay / カレンダー=0＝間引かない）。
+  private axisLabelStride = 0; // thinAxisLabels のキャッシュ（0 = 未計算 / 強制再計算）。
   private diagramViewport!: HTMLDivElement;
   private errorPanel!: HTMLDivElement;
   private warningPanel!: HTMLDivElement;
@@ -59,6 +64,11 @@ export class App {
   private selectedEditFile: string | null = null;
   private editSelecting: { originTaskId: TaskId; kind: "pred" | "succ" } | null = null;
   private layoutShiftNoticeShown = false;
+
+  // UI・UX仕様書 4.2.4: 横軸の表示モード（既定はカレンダー日付、切替で営業日番号）。
+  // 共通時間軸の原点が定まらない（W315）場合は rerender 側で営業日軸にフォールバックする。
+  private axisMode: "businessDay" | "calendar" = "calendar";
+  private axisToggleButton!: HTMLButtonElement;
 
   constructor(root: HTMLElement, defaultHolidayCsvText: string) {
     const defaultHolidays = parseHolidayFile(defaultHolidayCsvText);
@@ -98,8 +108,26 @@ export class App {
       this.taskFileInput.value = "";
     });
 
+    // UI・UX仕様書 4.2.4: 横軸のカレンダー日付 ⇔ 営業日数の切り替え（ヘッダー右端）。
+    // ラベルは切替先を表す（既定はカレンダー軸なので「営業日数表示に変更」）。rerender() が現在モードに合わせて上書きする。
+    this.axisToggleButton = createHtmlElement(
+      "button",
+      { type: "button", class: "axis-toggle" },
+      "営業日数表示に変更",
+    );
+    this.axisToggleButton.addEventListener("click", () => {
+      this.axisMode = this.axisMode === "businessDay" ? "calendar" : "businessDay";
+      this.rerender();
+    });
+
     const header = createHtmlElement("header", { class: "app-header" });
-    appendChildren(header, [title, openButton, resetButton, this.taskFileInput]);
+    appendChildren(header, [
+      title,
+      openButton,
+      resetButton,
+      this.taskFileInput,
+      this.axisToggleButton,
+    ]);
     return header;
   }
 
@@ -108,7 +136,10 @@ export class App {
 
     this.diagramViewport = createHtmlElement("div", { class: "diagram-viewport" });
     this.diagramLayer = createHtmlElement("div", { class: "diagram-layer" });
-    this.diagramViewport.appendChild(this.diagramLayer);
+    this.axisLayer = createHtmlElement("div", { class: "diagram-axis-layer" });
+    this.axisInner = createHtmlElement("div", { class: "diagram-axis-inner" });
+    this.axisLayer.appendChild(this.axisInner);
+    appendChildren(this.diagramViewport, [this.diagramLayer, this.axisLayer]);
     this.wireZoomPan();
 
     const zoomIn = createHtmlElement("button", { type: "button" }, "+");
@@ -274,10 +305,36 @@ export class App {
     const layout = layoutWorkspace(projects);
     const palette = this.workspace.getColorPalette();
 
+    // UI・UX仕様書 4.2.4: カレンダー軸は共通時間軸の原点日付が決まっているときのみ描画できる。
+    // 有効な開始日が1件も無い（W315）場合は営業日軸へフォールバックする。
+    const origin = this.workspace.getTimeAxisOrigin();
+    const calendarInput =
+      this.axisMode === "calendar" && origin !== null
+        ? { originDate: origin, holidayKeys: this.workspace.getHolidayKeys() }
+        : undefined;
+    // ボタンのラベルは「切替先」を表す（カレンダーモードなら「営業日数表示に変更」、原点未定で
+    // フォールバック中でも変わらない）。ファイル未読込／リセット直後はラベルそのままで無効化する。
+    // 営業日モードのときは、原点未定なら「カレンダー表示に変更」不可を無効化で示す。
+    this.axisToggleButton.textContent =
+      this.axisMode === "calendar" ? "営業日数表示に変更" : "カレンダー表示に変更";
+    this.axisToggleButton.disabled =
+      projects.length === 0 || (this.axisMode === "businessDay" && origin === null);
+    // カレンダー軸は既に週次で疎なので間引かない（0）。営業日軸は日ごとに出るので間引く。
+    this.axisLabelPitchPx = calendarInput ? 0 : DEFAULT_DIAGRAM_CONFIG.pixelsPerDay;
+    this.axisLabelStride = 0; // データ/モード変更のたびに再計算させる。
+
+    const { diagram, axis } = renderDiagram(
+      layout,
+      projects,
+      palette,
+      DEFAULT_DIAGRAM_CONFIG,
+      calendarInput,
+    );
     clearChildren(this.diagramLayer);
-    const svg = renderDiagram(layout, projects, palette, DEFAULT_DIAGRAM_CONFIG);
-    this.diagramLayer.appendChild(svg);
-    this.fitToView(svg);
+    this.diagramLayer.appendChild(diagram);
+    clearChildren(this.axisInner);
+    this.axisInner.appendChild(axis);
+    this.fitToView(diagram);
 
     renderErrorPanel(this.errorPanel, this.allErrors);
     renderWarningList(this.warningPanel, this.allWarnings);
@@ -503,6 +560,38 @@ export class App {
   private applyTransform(): void {
     this.diagramLayer.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
     this.diagramLayer.style.transformOrigin = "0 0";
+    // 軸は縦方向には固定し、横スクロール・ズームにのみ追従させる（UI・UX仕様書 4.2.4）。
+    // クリップ枠（.diagram-axis-layer）は動かさず、内側要素だけを変形する
+    // （枠自体を translate すると overflow:hidden のクリップごと画面外へ出てしまうため）。
+    this.axisInner.style.transform = `translate(${this.translateX}px, 0px) scale(${this.scale})`;
+    this.axisInner.style.transformOrigin = "0 0";
+    this.axisLayer.style.height = `${DEFAULT_DIAGRAM_CONFIG.axisHeight * this.scale}px`;
+    this.thinAxisLabels();
+  }
+
+  /**
+   * 営業日軸の目盛りラベルは日ごとに描画されるため、低ズームでは重なって読めない。
+   * 描画は再実行せず、現在の拡大率に応じて `<text>` の表示/非表示だけを切り替える。
+   * SVGの `<text>` は営業日順（左＝最大値〜右＝0）に並ぶので、右端（"0"）を必ず残して末尾から間引く。
+   */
+  private thinAxisLabels(): void {
+    const svg = this.axisInner.firstElementChild;
+    if (!svg) return;
+    const texts = [...svg.querySelectorAll<SVGTextElement>("text")];
+    if (this.axisLabelPitchPx === 0) {
+      // カレンダー軸（既に週次で疎）: 全表示。
+      for (const t of texts) t.style.display = "";
+      this.axisLabelStride = 1;
+      return;
+    }
+    const screenPitch = this.axisLabelPitchPx * this.scale;
+    const stride = Math.max(1, Math.ceil(AXIS_LABEL_MIN_GAP_PX / Math.max(screenPitch, 0.001)));
+    if (stride === this.axisLabelStride) return; // パンでは scale 不変なので DOM 操作を省く。
+    this.axisLabelStride = stride;
+    const n = texts.length;
+    texts.forEach((t, i) => {
+      t.style.display = (n - 1 - i) % stride === 0 ? "" : "none";
+    });
   }
 }
 

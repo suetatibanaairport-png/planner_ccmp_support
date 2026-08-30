@@ -39,7 +39,7 @@ function project(overrides: Partial<Project> & { key: string }): Project {
 
 function renderProject(p: Project): SVGSVGElement {
   const layout = layoutWorkspace([p]);
-  return renderDiagram(layout, [p], new Map());
+  return renderDiagram(layout, [p], new Map()).diagram;
 }
 
 /** 日数軸の目盛りラベル（数字のみのtext）とプロジェクト名ラベルを除いた、タスク名ラベルのtext要素一覧。 */
@@ -160,7 +160,7 @@ describe("renderDiagram: ダミー矢線の折れ線形状", () => {
     };
     const workspace: WorkspaceLayout = { projects: [layout] };
 
-    const svg = renderDiagram(workspace, [p], new Map());
+    const svg = renderDiagram(workspace, [p], new Map()).diagram;
     const polyline = svg.querySelector("polyline[stroke-dasharray]");
     expect(polyline).not.toBeNull();
     const points = polyline!
@@ -173,7 +173,7 @@ describe("renderDiagram: ダミー矢線の折れ線形状", () => {
       [number, number],
       [number, number],
     ];
-    expect(y1).toBe(y0); // 折れ点までは先行イベント（N0）と同じ行の高さ
+    expect(y1).toBe(y0); // 折れ点までは先行イベント（N0）と同じ行（レーン）を水平に保つ
     expect(y2).not.toBe(y0); // 合流イベント（N1）の行には末尾でのみ切り替わる
     expect(x1).toBeLessThan(points[2]![0]!); // 折れ点は終点の手前
   });
@@ -228,5 +228,141 @@ describe("DEFAULT_DIAGRAM_CONFIG", () => {
   it("時間軸は0.5倍（24px/営業日）、行間隔は1.5倍（84px）になっている", () => {
     expect(DEFAULT_DIAGRAM_CONFIG.pixelsPerDay).toBe(24);
     expect(DEFAULT_DIAGRAM_CONFIG.rowHeight).toBe(84);
+  });
+});
+
+describe("renderDiagram: カレンダー軸モード（UI・UX仕様書 4.2.4）", () => {
+  const twoEventsFiveDaysApart = (): Project => {
+    const events: Event[] = [
+      { id: "N0", number: 0 },
+      { id: "N1", number: 1 },
+    ];
+    const arrow: Arrow = {
+      from: "N0",
+      to: "N1",
+      kind: "activity",
+      taskId: "T1",
+      durationBusinessDays: 5,
+      placeholder: false,
+    };
+    return project({
+      key: "p1",
+      tasks: [task("T1", "作業")],
+      events,
+      arrows: [arrow],
+      eventTimings: [
+        { eventId: "N0", es: 0, ls: 0 },
+        { eventId: "N1", es: 5, ls: 5 },
+      ],
+      arrowTimings: [{ arrow, es: 0, ef: 5, ls: 0, lf: 5, totalFloat: 0, isCritical: true }],
+    });
+  };
+
+  it("週をまたぐノード間隔が土日ぶん広がり、非営業日の網掛け帯と週次の日付ラベルが出る", () => {
+    const p = twoEventsFiveDaysApart();
+    const layout = layoutWorkspace([p]);
+    const origin = new Date(Date.UTC(2026, 0, 5)); // 月曜
+    const { diagram, axis } = renderDiagram(layout, [p], new Map(), DEFAULT_DIAGRAM_CONFIG, {
+      originDate: origin,
+      holidayKeys: new Set<string>(),
+    });
+
+    const cxs = [...diagram.querySelectorAll("circle")]
+      .map((c) => Number(c.getAttribute("cx")))
+      .sort((a, b) => a - b);
+    // 営業日5個ぶん = 暦日7個ぶん（土日で+2）→ 7 * pixelsPerCalendarDay(18) = 126（営業日軸なら 120）
+    expect(cxs[1]! - cxs[0]!).toBe(7 * DEFAULT_DIAGRAM_CONFIG.pixelsPerCalendarDay);
+
+    // 非営業日の網掛け <rect>（本体側・全高）
+    expect(diagram.querySelector("rect")).not.toBeNull();
+
+    // 週次の日付ラベルは軸SVG側。"1/12"（bd5 = 翌週月曜）が含まれ、営業日番号は出ない
+    const axisTexts = [...axis.querySelectorAll("text")].map((t) => t.textContent);
+    expect(axisTexts).toContain("1/12");
+    expect(axisTexts.some((t) => t === "5")).toBe(false);
+  });
+
+  it("軸SVGは高さ axisHeight で本体と分離されている", () => {
+    const p = twoEventsFiveDaysApart();
+    const { diagram, axis } = renderDiagram(layoutWorkspace([p]), [p], new Map());
+    expect(Number(axis.getAttribute("height"))).toBe(DEFAULT_DIAGRAM_CONFIG.axisHeight);
+    expect(axis.getAttribute("width")).toBe(diagram.getAttribute("width"));
+    // 目盛りラベルは軸側のみ・本体側には無い
+    const bodyNumeric = [...diagram.querySelectorAll("text")].filter((t) =>
+      /^-?\d+$/.test(t.textContent ?? ""),
+    );
+    expect(bodyNumeric).toHaveLength(0);
+  });
+
+  it("営業日軸（calendarAxisInput 省略）は最終タスク終了=0からの残営業日数を右端0で表示する", () => {
+    const p = twoEventsFiveDaysApart();
+    const { diagram, axis } = renderDiagram(layoutWorkspace([p]), [p], new Map());
+    const cxs = [...diagram.querySelectorAll("circle")]
+      .map((c) => Number(c.getAttribute("cx")))
+      .sort((a, b) => a - b);
+    expect(cxs[1]! - cxs[0]!).toBe(5 * DEFAULT_DIAGRAM_CONFIG.pixelsPerDay);
+    expect(diagram.querySelector("rect")).toBeNull();
+
+    // 目盛りは lastDay(=5) から 0 へ。右端（cx最大）のラベルが "0"
+    const labels = [...axis.querySelectorAll("text")]
+      .map((t) => ({ x: Number(t.getAttribute("x")), text: t.textContent }))
+      .sort((a, b) => a.x - b.x);
+    expect(labels.map((l) => l.text)).toEqual(["5", "4", "3", "2", "1", "0"]);
+  });
+});
+
+describe("renderDiagram: レーン（行）並びは軸モードに依存しない（仕様）", () => {
+  it("同じ WorkspaceLayout なら calendarAxisInput の有無でノードの cy（行）が完全一致する", () => {
+    // N0→B（クリティカル, 5日）／ N0→C→D（非クリティカル）／ B→D。C は別レーンに入る。
+    const events: Event[] = [
+      { id: "N0", number: 0 },
+      { id: "C", number: 1 },
+      { id: "B", number: 2 },
+      { id: "D", number: 3 },
+    ];
+    const mk = (from: string, to: string, dur: number): Arrow => ({
+      from,
+      to,
+      kind: "activity",
+      taskId: `${from}${to}`,
+      durationBusinessDays: dur,
+      placeholder: false,
+    });
+    const arrows = [mk("N0", "B", 5), mk("N0", "C", 1), mk("C", "D", 1), mk("B", "D", 1)];
+    const p = project({
+      key: "p1",
+      events,
+      arrows,
+      eventTimings: [
+        { eventId: "N0", es: 0, ls: 0 },
+        { eventId: "C", es: 1, ls: 5 },
+        { eventId: "B", es: 5, ls: 5 },
+        { eventId: "D", es: 6, ls: 6 },
+      ],
+      arrowTimings: arrows.map((a) => ({
+        arrow: a,
+        es: 0,
+        ef: 0,
+        ls: 0,
+        lf: 0,
+        totalFloat: a.taskId === "N0B" || a.taskId === "BD" ? 0 : 4,
+        isCritical: a.taskId === "N0B" || a.taskId === "BD",
+      })),
+      criticalPaths: [[arrows[0]!, arrows[3]!]],
+    });
+    const layout = layoutWorkspace([p]);
+
+    const cyByEvent = (svg: SVGSVGElement) =>
+      new Map([...svg.querySelectorAll("circle")].map((c, i) => [i, Number(c.getAttribute("cy"))]));
+
+    const businessDay = renderDiagram(layout, [p], new Map()).diagram;
+    const calendar = renderDiagram(layout, [p], new Map(), DEFAULT_DIAGRAM_CONFIG, {
+      originDate: new Date(Date.UTC(2026, 0, 5)),
+      holidayKeys: new Set<string>(),
+    }).diagram;
+
+    expect(cyByEvent(calendar)).toEqual(cyByEvent(businessDay));
+    // 少なくとも2レーン使っている（テストが自明でないことの確認）
+    expect(new Set(cyByEvent(businessDay).values()).size).toBeGreaterThan(1);
   });
 });

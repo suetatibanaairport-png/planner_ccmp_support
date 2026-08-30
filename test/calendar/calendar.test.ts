@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { computeDuration } from "../../src/calendar/businessDays";
+import { addBusinessDays, computeDuration } from "../../src/calendar/businessDays";
 import { parseHolidayFile } from "../../src/calendar/holidayFile";
-import { parseHolidayDate, parseTaskDate } from "../../src/calendar/parseDate";
+import { parseHolidayDate, parseTaskDate, toDateKey } from "../../src/calendar/parseDate";
 
 const NO_HOLIDAYS = new Set<string>();
 const d = (s: string) => parseTaskDate(s)!;
@@ -91,6 +91,28 @@ describe("computeDuration", () => {
     const holidays = new Set(["2026-01-06", "2026-01-07"]);
     // 月(1/5)〜金(1/9) のうち火水が祝日 → 3営業日
     expect(computeDuration(d("2026/01/05"), d("2026/01/09"), holidays).businessDays).toBe(3);
+  });
+});
+
+describe("addBusinessDays（グローバル営業日番号 → 実日付）", () => {
+  it("n=0 は開始日そのもの", () => {
+    expect(toDateKey(addBusinessDays(d("2026/01/05"), 0, NO_HOLIDAYS))).toBe("2026-01-05");
+  });
+
+  it("金曜から2営業日で翌週火曜（土日を飛ばす）", () => {
+    // 金 1/9 → 月 1/12 (1) → 火 1/13 (2)
+    expect(toDateKey(addBusinessDays(d("2026/01/09"), 2, NO_HOLIDAYS))).toBe("2026-01-13");
+  });
+
+  it("祝日も飛ばす", () => {
+    const holidays = new Set(["2026-01-06"]); // 火
+    // 月 1/5 → (火 1/6 は祝日で飛ばす) → 水 1/7 (1) → 木 1/8 (2)
+    expect(toDateKey(addBusinessDays(d("2026/01/05"), 2, holidays))).toBe("2026-01-08");
+  });
+
+  it("負の n は逆方向", () => {
+    // 火 1/13 から -2 → 月 1/12 (1) → 金 1/9 (2)
+    expect(toDateKey(addBusinessDays(d("2026/01/13"), -2, NO_HOLIDAYS))).toBe("2026-01-09");
   });
 });
 

@@ -34,6 +34,21 @@ export function nextOrSameBusinessDay(date: Date, holidayKeys: ReadonlySet<strin
   return cursor;
 }
 
+/**
+ * start（営業日である前提。共通時間軸の原点）から n 営業日後の Date を返す。n=0 は start。
+ * businessDayOffset の逆関数（4.1.5 のグローバル営業日番号 → 実日付）。負の n も対称に扱う。
+ */
+export function addBusinessDays(start: Date, n: number, holidayKeys: ReadonlySet<string>): Date {
+  const step = n < 0 ? -1 : 1;
+  let remaining = Math.abs(n);
+  let cursor = start;
+  while (remaining > 0) {
+    cursor = addDays(cursor, step);
+    if (isBusinessDay(cursor, holidayKeys)) remaining -= 1;
+  }
+  return cursor;
+}
+
 export interface DurationResult {
   businessDays: number;
   placeholder: boolean; // 3.6/4.1.1: 開始日・期限日の欠落、または開始日>期限日
